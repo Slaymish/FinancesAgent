@@ -1,0 +1,101 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model IngestFile {
+  id          String   @id @default(cuid())
+  source      String
+  checksum    String
+  storageKey  String   @map("storage_key")
+  receivedAt  DateTime @default(now()) @map("received_at")
+  processedAt DateTime? @map("processed_at")
+
+  @@index([receivedAt])
+  @@unique([source, checksum])
+  @@map("ingest_files")
+}
+
+model DailyWeight {
+  date     DateTime @id
+  weightKg Float    @map("weight_kg")
+
+  @@map("daily_weight")
+}
+
+model DailyNutrition {
+  date      DateTime @id
+  calories  Int?
+  proteinG  Float?   @map("protein_g")
+  carbsG    Float?   @map("carbs_g")
+  fatG      Float?   @map("fat_g")
+  fibreG    Float?   @map("fibre_g")
+  alcoholG  Float?   @map("alcohol_g")
+
+  @@map("daily_nutrition")
+}
+
+model SleepSession {
+  id          String   @id @default(cuid())
+  start       DateTime
+  end         DateTime
+  durationMin Int      @map("duration_min")
+  quality     String?
+
+  @@index([start])
+  @@map("sleep_sessions")
+}
+
+model Workout {
+  id          String   @id @default(cuid())
+  start       DateTime
+  type        String
+  durationMin Int      @map("duration_min")
+  distanceKm  Float?   @map("distance_km")
+  avgHr       Int?     @map("avg_hr")
+  maxHr       Int?     @map("max_hr")
+  avgPace     Float?
+
+  @@index([start])
+  @@map("workouts")
+}
+
+model DailyVitals {
+  date       DateTime @id
+  restingHr  Int?     @map("resting_hr")
+  hrv        Float?
+
+  @@map("daily_vitals")
+}
+
+model InsightsDoc {
+  id           String   @id @default(cuid())
+  createdAt    DateTime @default(now()) @map("created_at")
+  markdown     String
+  diffFromPrev String?  @map("diff_from_prev")
+  metricsPack  Json?    @map("metrics_pack")
+
+  pipelineRunId String?     @map("pipeline_run_id")
+  pipelineRun   PipelineRun? @relation(fields: [pipelineRunId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([pipelineRunId])
+  @@map("insights_docs")
+}
+
+model PipelineRun {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now()) @map("created_at")
+  metricsPack Json     @map("metrics_pack")
+
+  processedIngestCount Int @map("processed_ingest_count")
+
+  insightsDocs InsightsDoc[]
+
+  @@index([createdAt])
+  @@map("pipeline_runs")
+}
