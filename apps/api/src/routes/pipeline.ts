@@ -1,8 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../prisma.js";
 import { loadEnv } from "../env.js";
-import { readLocalStorageJson } from "../storage/localStorage.js";
+import { readStorageJson } from "../storage/storage.js";
 import { parseAppleHealthExport } from "../parsers/appleHealthStub.js";
+import { generateInsightsUnifiedDiff } from "../insights/llm.js";
+import { applyUnifiedDiff } from "../insights/patch.js";
 
 function startOfDayUtc(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -10,6 +12,10 @@ function startOfDayUtc(date: Date): Date {
 
 function addDaysUtc(date: Date, days: number): Date {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+function dateKeyUtc(date: Date): string {
+  return startOfDayUtc(date).toISOString().slice(0, 10);
 }
 
 function linearRegressionSlope(points: Array<{ x: number; y: number }>): number | null {
@@ -83,6 +89,37 @@ async function computeMetricsPack(now = new Date()) {
   const avgRestingHr7 = avg(vitals7.map((v) => v.restingHr).filter((v): v is number => typeof v === "number"));
   const avgRestingHr14 = avg(vitals14.map((v) => v.restingHr).filter((v): v is number => typeof v === "number"));
 
+  const sleepByDay = new Map<string, number>();
+  for (const s of sleeps28) {
+    const k = dateKeyUtc(s.start);
+    sleepByDay.set(k, (sleepByDay.get(k) ?? 0) + s.durationMin);
+  }
+
+  const workoutMinByDay = new Map<string, number>();
+  for (const w of workouts28) {
+    const k = dateKeyUtc(w.start);
+    workoutMinByDay.set(k, (workoutMinByDay.get(k) ?? 0) + w.durationMin);
+  }
+
+  const weightSeries = weights28.map((w) => ({ date: dateKeyUtc(w.date), weightKg: w.weightKg }));
+  const nutritionSeries = nutrition28.map((n) => ({
+    date: dateKeyUtc(n.date),
+    calories: n.calories,
+    proteinG: n.proteinG
+  }));
+  const sleepSeries = Array.from(sleepByDay.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, minutes]) => ({ date, minutes }));
+  const trainingSeries = Array.from(workoutMinByDay.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, minutes]) => ({ date, minutes }));
+
+  const levers: string[] = [];
+  if (avgProtein7 != null && avgProtein7 < 120) levers.push("Protein: raise average daily protein (aim >= 120g/day).");
+  if (avgSleepMin7 != null && avgSleepMin7 < 7 * 60) levers.push("Sleep: push average sleep toward 7+ hours.");
+  if (workouts7.length < 3) levers.push("Training: schedule at least 3 sessions/week.");
+  if (levers.length === 0) levers.push("Consistency: keep inputs stable and reassess weekly.");
+
   return {
     generatedAt: now.toISOString(),
     ranges: {
@@ -114,8 +151,77 @@ async function computeMetricsPack(now = new Date()) {
     recovery: {
       avgRestingHr7,
       avgRestingHr14
-    }
+    },
+    trends: {
+      weightSeries,
+      nutritionSeries,
+      sleepSeries,
+      trainingSeries
+    },
+    levers: levers.slice(0, 3)
   };
+}
+
+function computeOnTrack(params: {
+  env: ReturnType<typeof loadEnv>;
+  metricsPack: any;
+}): any {
+  const { env, metricsPack } = params;
+  if (!env.GOAL_TARGET_WEIGHT_KG || !env.GOAL_TARGET_DATE) return null;
+  const targetDate = new Date(env.GOAL_TARGET_DATE);
+  if (Number.isNaN(targetDate.getTime())) return null;
+  const latest = metricsPack.weight?.latest;
+  if (!latest || typeof latest.weightKg !== "number") return null;
+
+  const today = new Date(metricsPack.ranges?.d7?.end ?? new Date().toISOString());
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const daysRemaining = Math.ceil((startOfDayUtc(targetDate).getTime() - startOfDayUtc(today).getTime()) / msPerDay);
+  if (daysRemaining <= 0) return null;
+
+  const requiredSlopeKgPerDay = (env.GOAL_TARGET_WEIGHT_KG - latest.weightKg) / daysRemaining;
+  const observed = metricsPack.weight?.slopeKgPerDay14;
+  const observedSlopeKgPerDay14 = typeof observed === "number" ? observed : null;
+  if (observedSlopeKgPerDay14 == null) return null;
+
+  const losing = requiredSlopeKgPerDay < 0;
+  const onTrack = losing
+    ? observedSlopeKgPerDay14 <= requiredSlopeKgPerDay
+    : observedSlopeKgPerDay14 >= requiredSlopeKgPerDay;
+
+  return {
+    targetWeightKg: env.GOAL_TARGET_WEIGHT_KG,
+    targetDate: targetDate.toISOString(),
+    requiredSlopeKgPerDay,
+    observedSlopeKgPerDay14,
+    onTrack
+  };
+}
+
+function sanityWarnings(parsed: ReturnType<typeof parseAppleHealthExport>): string[] {
+  const warnings: string[] = [];
+
+  for (const n of parsed.rows.dailyNutrition) {
+    if (n.calories != null) {
+      if (n.calories < 0) warnings.push(`Negative calories on ${n.date.toISOString().slice(0, 10)}`);
+      if (n.calories > 12000) warnings.push(`Implausible calories on ${n.date.toISOString().slice(0, 10)}: ${n.calories}`);
+    }
+  }
+
+  for (const s of parsed.rows.sleepSessions) {
+    if (s.durationMin <= 0) warnings.push(`Non-positive sleep duration at ${s.start.toISOString()}`);
+    if (s.durationMin > 24 * 60) warnings.push(`Implausible sleep duration at ${s.start.toISOString()}: ${s.durationMin}min`);
+  }
+
+  const workoutIds = new Set<string>();
+  for (const w of parsed.rows.workouts) {
+    if (w.durationMin <= 0) warnings.push(`Non-positive workout duration at ${w.start.toISOString()}`);
+    if (w.sourceId) {
+      if (workoutIds.has(w.sourceId)) warnings.push(`Duplicate workout sourceId in payload: ${w.sourceId}`);
+      workoutIds.add(w.sourceId);
+    }
+  }
+
+  return warnings;
 }
 
 export async function pipelineRoutes(app: FastifyInstance) {
@@ -138,7 +244,14 @@ export async function pipelineRoutes(app: FastifyInstance) {
     };
   });
 
-  app.post("/run", async (_req, reply) => {
+  app.post("/run", async (req, reply) => {
+    if (env.PIPELINE_TOKEN) {
+      const token = req.headers["x-pipeline-token"];
+      if (typeof token !== "string" || token !== env.PIPELINE_TOKEN) {
+        return reply.code(401).send({ error: "unauthorized" });
+      }
+    }
+
     const unprocessed = await prisma.ingestFile.findMany({
       where: { processedAt: null },
       orderBy: { receivedAt: "asc" }
@@ -148,15 +261,10 @@ export async function pipelineRoutes(app: FastifyInstance) {
     let processedCount = 0;
 
     for (const ingest of unprocessed) {
-      if (env.STORAGE_PROVIDER !== "local") {
-        return reply
-          .code(501)
-          .send({ error: `storage provider '${env.STORAGE_PROVIDER}' not implemented` });
-      }
-
-      const payload = await readLocalStorageJson(env.STORAGE_LOCAL_DIR, ingest.storageKey);
+      const payload = await readStorageJson({ env, storageKey: ingest.storageKey });
       const parsed = parseAppleHealthExport(payload);
       warnings.push(...parsed.warnings);
+      warnings.push(...sanityWarnings(parsed));
 
       // Upsert canonical rows (currently no-op until parser is implemented)
       await prisma.$transaction([
@@ -276,21 +384,57 @@ export async function pipelineRoutes(app: FastifyInstance) {
     }
 
     const metricsPack = await computeMetricsPack();
+    const onTrack = computeOnTrack({ env, metricsPack: metricsPack as any });
+    const metricsPackWithGoal = {
+      ...(metricsPack as any),
+      onTrack
+    };
 
     const run = await prisma.pipelineRun.create({
       data: {
-        metricsPack,
+        metricsPack: metricsPackWithGoal,
         processedIngestCount: processedCount
       }
     });
 
-    const existingDocs = await prisma.insightsDoc.count();
-    if (existingDocs === 0) {
+    const prev = await prisma.insightsDoc.findFirst({ orderBy: { createdAt: "desc" } });
+
+    if (!prev) {
       await prisma.insightsDoc.create({
         data: {
           markdown: "# Insights\n\n",
           diffFromPrev: null,
-          metricsPack,
+          metricsPack: metricsPackWithGoal,
+          pipelineRunId: run.id
+        }
+      });
+    } else {
+      let nextMarkdown = prev.markdown;
+      let diffFromPrev: string | null = null;
+
+      if (env.OPENAI_API_KEY && env.INSIGHTS_MODEL) {
+        try {
+          const diff = await generateInsightsUnifiedDiff({
+            apiKey: env.OPENAI_API_KEY,
+            model: env.INSIGHTS_MODEL,
+            previousMarkdown: prev.markdown,
+            metricsPack: metricsPackWithGoal
+          });
+
+          nextMarkdown = applyUnifiedDiff({ previous: prev.markdown, patch: diff });
+          diffFromPrev = diff;
+        } catch (err) {
+          warnings.push(`Insights update failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      } else {
+        warnings.push("Insights update skipped: OPENAI_API_KEY/INSIGHTS_MODEL not configured.");
+      }
+
+      await prisma.insightsDoc.create({
+        data: {
+          markdown: nextMarkdown,
+          diffFromPrev,
+          metricsPack: metricsPackWithGoal,
           pipelineRunId: run.id
         }
       });
@@ -301,7 +445,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
       runId: run.id,
       processedIngestCount: processedCount,
       warnings,
-      metricsPack
+      metricsPack: metricsPackWithGoal
     });
   });
 }

@@ -11,7 +11,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <nav>
+          <a href="/">Dashboard</a> | <a href="/trends">Trends</a> | <a href="/insights">Insights</a> |{" "}
+          <a href="/data-quality">Data quality</a> | <a href="/metrics">Raw metrics</a>
+        </nav>
+        {children}
+      </body>
     </html>
   );
 }

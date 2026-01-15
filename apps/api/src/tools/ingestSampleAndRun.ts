@@ -58,6 +58,8 @@ async function seedIngestFromFile(opts: { filePath: string }) {
 async function run() {
   loadDotenv();
 
+  const env = loadEnv();
+
   const here = path.dirname(fileURLToPath(import.meta.url));
   const repoRoot = path.resolve(here, "../../../../");
 
@@ -68,7 +70,11 @@ async function run() {
   const seeded = await seedIngestFromFile({ filePath: inputPath });
 
   const app = createApp();
-  const pipeline = await app.inject({ method: "POST", url: "/api/pipeline/run" });
+  const pipeline = await app.inject({
+    method: "POST",
+    url: "/api/pipeline/run",
+    headers: env.PIPELINE_TOKEN ? { "x-pipeline-token": env.PIPELINE_TOKEN } : undefined
+  });
   await app.close();
 
   // eslint-disable-next-line no-console

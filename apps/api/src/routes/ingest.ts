@@ -2,9 +2,9 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import crypto from "node:crypto";
 import path from "node:path";
-import fs from "node:fs/promises";
 import { prisma } from "../prisma.js";
 import { loadEnv } from "../env.js";
+import { writeStorageJson } from "../storage/storage.js";
 
 const bodySchema = z.unknown();
 
@@ -27,21 +27,10 @@ export async function ingestRoutes(app: FastifyInstance) {
     const checksum = computeSha256(raw);
     const receivedAt = new Date();
 
-    if (env.STORAGE_PROVIDER !== "local") {
-      return reply
-        .code(501)
-        .send({ error: `storage provider '${env.STORAGE_PROVIDER}' not implemented` });
-    }
-
-    const dir = env.STORAGE_LOCAL_DIR;
-    await fs.mkdir(dir, { recursive: true });
-
     const filename = `${receivedAt.toISOString()}_${checksum}.json`.replaceAll(":", "-");
     const storageKey = path.join("apple-health", filename);
 
-    const fullPath = path.join(dir, storageKey);
-    await fs.mkdir(path.dirname(fullPath), { recursive: true });
-    await fs.writeFile(fullPath, raw, "utf8");
+    await writeStorageJson({ env, storageKey, rawJson: raw });
 
     const ingestFile = await prisma.ingestFile.create({
       data: {

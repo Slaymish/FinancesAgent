@@ -18,6 +18,18 @@ function sha256(input: string): string {
   return crypto.createHash("sha256").update(input).digest("hex");
 }
 
+function stableWorkoutSourceId(input: {
+  startRaw: string;
+  endRaw: string;
+  name: string;
+  durationSeconds: number | null;
+  distanceKm: number | null;
+}): string {
+  const dur = input.durationSeconds == null ? "" : String(input.durationSeconds);
+  const dist = input.distanceKm == null ? "" : String(input.distanceKm);
+  return sha256(`workout:${input.startRaw}|${input.endRaw}|${input.name}|${dur}|${dist}`);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -286,6 +298,16 @@ export const parseHealthAutoExport: IngestParser = (payload: unknown): ParserRes
       const speedKmh = speedObj && typeof speedObj.qty === "number" ? speedObj.qty : speedObj && speedObj.qty != null ? Number(speedObj.qty) : null;
       const avgPace = speedKmh && Number.isFinite(speedKmh) && speedKmh > 0 ? 60 / speedKmh : null; // min/km
 
+      const resolvedSourceId =
+        id ??
+        stableWorkoutSourceId({
+          startRaw,
+          endRaw,
+          name,
+          durationSeconds: Number.isFinite(durationSeconds) ? durationSeconds : null,
+          distanceKm: Number.isFinite(distanceKm ?? NaN) ? (distanceKm as number) : null
+        });
+
       rows.workouts.push({
         start,
         type: name,
@@ -294,7 +316,7 @@ export const parseHealthAutoExport: IngestParser = (payload: unknown): ParserRes
         avgHr,
         maxHr,
         avgPace,
-        sourceId: id
+        sourceId: resolvedSourceId
       });
     }
   }
