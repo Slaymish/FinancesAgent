@@ -4,6 +4,6 @@
 **/.turbo
 **/.pnpm-store
 **/.env
-storage/
+/storage/
 .git/
 .vscode/

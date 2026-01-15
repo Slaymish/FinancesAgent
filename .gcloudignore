@@ -1,0 +1,17 @@
+# Keep Cloud Build context small
+.gcloudignore
+.git/
+.vscode/
+node_modules/
+**/node_modules/**
+.next/
+**/.next/**
+dist/
+**/dist/**
+.turbo/
+**/.turbo/**
+.pnpm-store/
+**/.pnpm-store/**
+/storage/
+apps/api/.env
+apps/web/.env.local
