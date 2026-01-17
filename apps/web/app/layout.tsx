@@ -3,24 +3,21 @@ import "./globals.css";
 import Nav from "./components/nav";
 import SyncButton from "./components/sync-button";
 import Providers from "./providers";
-import { auth } from "./auth";
 import AuthButton from "./components/auth-button";
 
 export const metadata = {
   title: "Health Insights Agent"
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children
 }: {
   children: ReactNode;
 }) {
-  const session = await auth();
-
   return (
     <html lang="en">
       <body>
-        <Providers session={session}>
+        <Providers>
           <div className="app-shell">
             <header className="top-bar">
               <div className="brand">
