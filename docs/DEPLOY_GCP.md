@@ -18,9 +18,14 @@ Enable required APIs:
 gcloud services enable \
   run.googleapis.com \
   cloudbuild.googleapis.com \
-  sqladmin.googleapis.com \
   cloudscheduler.googleapis.com \
   storage.googleapis.com
+```
+
+If you choose **Option B (Cloud SQL)**, you will also need:
+
+```bash
+gcloud services enable sqladmin.googleapis.com
 ```
 
 ## 1) Create GCS bucket (raw ingest storage)
@@ -79,42 +84,18 @@ gcloud run deploy $SERVICE \
   --min-instances 0 \
   --max-instances 1 \
   --set-env-vars \
-API_PORT=8080,STORAGE_PROVIDER=gcs,STORAGE_BUCKET=$BUCKET,INGEST_TOKEN=REPLACE_ME,PIPELINE_TOKEN=REPLACE_ME,DATABASE_URL='REPLACE_WITH_PROVIDER_URL'
+API_PORT=8080,STORAGE_PROVIDER=gcs,STORAGE_BUCKET=$BUCKET,INGEST_TOKEN=REPLACE_ME,PIPELINE_TOKEN=REPLACE_ME,INSIGHTS_ENABLED=false,DATABASE_URL='REPLACE_WITH_PROVIDER_URL'
 ```
 
 Note: avoid putting secrets directly in command history. For production, prefer Secret Manager + `--set-secrets`.
+
+Insights are off-by-default. If you want LLM insights, set `INSIGHTS_ENABLED=true` and provide `OPENAI_API_KEY` + `INSIGHTS_MODEL`.
 
 When deploying the Cloud Run service, you will **not** use `--add-cloudsql-instances` and you will set `DATABASE_URL` to the provider URL.
 
 ### Option B: Cloud SQL Postgres
 
-```bash
-export INSTANCE=health-agent-pg
-export DB=health_agent
-
-gcloud sql instances create "$INSTANCE" \
-  --database-version=POSTGRES_16 \
-  --region="$REGION" \
-  --edition=ENTERPRISE \
-  --tier=db-custom-1-4096 \
-  --storage-type=SSD \
-  --storage-size=10
-
-# run this next
-gcloud sql databases create $DB --instance=$INSTANCE
-
-gcloud sql users set-password postgres \
-  --instance=$INSTANCE \
-  --password='CHOOSE_A_STRONG_PASSWORD'
-```
-
-Connection name:
-
-```bash
-gcloud sql instances describe $INSTANCE --format='value(connectionName)'
-```
-
-- hamishapps:us-central1:health-agent-pg
+Cloud SQL is supported but is intentionally **not** the default path (it’s easy to pay for 24/7 instance uptime). See **Appendix: Cloud SQL (Option B)** at the bottom of this doc.
 
 ## 3) Build and deploy API to Cloud Run
 
@@ -140,26 +121,21 @@ Do not commit real tokens/passwords into this repo. Use placeholders locally and
 
 Note: `gcloud run services describe ... --format='value(...env)'` will print your secrets in plaintext. Avoid pasting that output into docs/chats. If secrets are exposed, rotate them.
 
-If you are using Cloud SQL, you also need a Cloud SQL socket DATABASE_URL. Example:
-
-```
-postgresql://postgres:PASSWORD@/health_agent?host=/cloudsql/INSTANCE_CONNECTION_NAME&schema=public
-```
-
-Deploy command:
+Deploy command (Option C / external Postgres):
 
 ```bash
 export SERVICE=health-agent-api
 export IMAGE=gcr.io/$PROJECT_ID/health-agent-api:latest
-export INSTANCE_CONNECTION_NAME=$(gcloud sql instances describe $INSTANCE --format='value(connectionName)')
 
 gcloud run deploy $SERVICE \
   --image $IMAGE \
   --region $REGION \
   --allow-unauthenticated \
-  --add-cloudsql-instances $INSTANCE_CONNECTION_NAME \
+  --min-instances 0 \
+  --max-instances 1 \
   --set-env-vars \
-API_PORT=8080,STORAGE_PROVIDER=gcs,STORAGE_BUCKET=$BUCKET,INGEST_TOKEN=REPLACE_ME,PIPELINE_TOKEN=REPLACE_ME,DATABASE_URL='postgresql://postgres:PASSWORD@/health_agent?host=/cloudsql/'$INSTANCE_CONNECTION_NAME'&schema=public'
+API_PORT=8080,STORAGE_PROVIDER=gcs,STORAGE_BUCKET=$BUCKET,INGEST_TOKEN=REPLACE_ME,PIPELINE_TOKEN=REPLACE_ME,INSIGHTS_ENABLED=false,DATABASE_URL='REPLACE_WITH_PROVIDER_URL'
+```
 
 ### Low-cost Cloud Run settings (recommended)
 
@@ -168,14 +144,10 @@ To keep Cloud Run costs near-zero when idle:
 - Set **min instances = 0**
 - Consider setting **max instances = 1** (helps protect your Postgres from too many concurrent connections)
 
-You can apply these on deploy, for example:
+You can also apply these settings independently later:
 
 ```bash
-gcloud run deploy $SERVICE \
-  --region $REGION \
-  --min-instances 0 \
-  --max-instances 1
-```
+gcloud run deploy $SERVICE --region $REGION --min-instances 0 --max-instances 1
 ```
 
 For production, prefer storing `INGEST_TOKEN`, `PIPELINE_TOKEN`, and `DATABASE_URL` in Secret Manager and mounting them as env vars via `--set-secrets` instead of `--set-env-vars`.
@@ -188,76 +160,26 @@ export RUN_SA=$(gcloud run services describe $SERVICE --region $REGION --format=
 gcloud storage buckets add-iam-policy-binding gs://$BUCKET \
   --member=serviceAccount:$RUN_SA \
   --role=roles/storage.objectAdmin
+
 ```
 
-Run migrations against Cloud SQL (recommended via Cloud SQL Auth Proxy):
+## 4) Configure Health Auto Export (REST push)
 
-Before running the proxy, ensure you have Application Default Credentials (ADC) set up (this is separate from `gcloud auth login`):
+Once your API is deployed, set up your exporter (Health Auto Export app or Apple Shortcut) to POST the JSON export to:
 
-```bash
-gcloud auth application-default login
-gcloud auth application-default set-quota-project $PROJECT_ID
-```
+- `https://YOUR_CLOUD_RUN_URL/api/ingest/apple-health`
 
-Your user (or service account) also needs `roles/cloudsql.client` on the project.
+Auth headers (pick one):
 
-```bash
-export INSTANCE_CONNECTION_NAME=$(gcloud sql instances describe $INSTANCE --format='value(connectionName)')
+- `Authorization: Bearer <INGEST_TOKEN>`
+- OR `X-INGEST-TOKEN: <INGEST_TOKEN>`
 
-# If you have local Postgres running (e.g. via docker-compose), 5432 is often already taken.
-# Use a different local port for the proxy (example: 5433).
-export PROXY_PORT=5433
-cloud-sql-proxy "$INSTANCE_CONNECTION_NAME" --port $PROXY_PORT
-```
+Troubleshooting tips:
 
-The Cloud SQL Auth Proxy is just a single binary, but on Arch/aarch64 the AUR packages may not be available. Pick one of these options:
+- If uploads fail for very large date ranges, switch to daily exports (the API allows up to ~50MB, but mobile networks/timeouts are the usual limit).
+- Check `GET /api/ingest/status` to confirm the last ingest arrived.
 
-### Option A (recommended): run the proxy via Docker (works on ARM64)
-
-```bash
-export INSTANCE_CONNECTION_NAME=$(gcloud sql instances describe $INSTANCE --format='value(connectionName)')
-
-docker run --rm -it \
-  -p 127.0.0.1:5433:5432 \
-  gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.20.0 \
-  --address 0.0.0.0 \
-  --port 5432 \
-  "$INSTANCE_CONNECTION_NAME"
-```
-
-### Option B: install the proxy binary directly (linux_arm64)
-
-```bash
-curl -fsSL -o cloud-sql-proxy \
-  https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.20.0/cloud-sql-proxy.linux.arm64
-chmod +x cloud-sql-proxy
-sudo mv cloud-sql-proxy /usr/local/bin/cloud-sql-proxy
-
-export INSTANCE_CONNECTION_NAME=$(gcloud sql instances describe $INSTANCE --format='value(connectionName)')
-export PROXY_PORT=5433
-cloud-sql-proxy "$INSTANCE_CONNECTION_NAME" --port $PROXY_PORT
-```
-
-### Option C: install via system package manager (varies by distro/arch)
-
-If you’re on an amd64 distro that packages it, you can use your OS package.
-
-In another terminal:
-
-```bash
-export PROXY_PORT=5433
-# Use the password you set earlier with:
-#   gcloud sql users set-password postgres --instance=$INSTANCE --password='...'
-# If you don't remember it, reset it now:
-#   gcloud sql users set-password postgres --instance=$INSTANCE --password='CHOOSE_A_STRONG_PASSWORD'
-
-# Paste or prompt for the password (avoid committing it anywhere):
-read -s CLOUDSQL_POSTGRES_PASSWORD?"Cloud SQL postgres password: " && echo
-export DATABASE_URL="postgresql://postgres:$CLOUDSQL_POSTGRES_PASSWORD@localhost:$PROXY_PORT/health_agent?schema=public"
-pnpm --filter @health-agent/api prisma:deploy
-```
-
-## 4) Cloud Scheduler: daily pipeline run
+## 5) Cloud Scheduler: daily pipeline run
 
 Get the Cloud Run URL:
 
@@ -265,7 +187,7 @@ Get the Cloud Run URL:
 export API_URL=$(gcloud run services describe $SERVICE --region $REGION --format='value(status.url)')
 ```
 
-Create a scheduler job that hits `/api/pipeline/run` with the header `X-PIPELINE-TOKEN`:
+Create a scheduler job that hits `/api/pipeline/run` with `X-PIPELINE-TOKEN` (or use `Authorization: Bearer <PIPELINE_TOKEN>` if you prefer):
 
 ```bash
 gcloud scheduler jobs create http health-agent-daily-pipeline \
@@ -278,14 +200,81 @@ gcloud scheduler jobs create http health-agent-daily-pipeline \
   --attempt-deadline 10m
 ```
 
-## 5) Point your exporter app at ingest
-
-- Endpoint: `POST $API_URL/api/ingest/apple-health`
-- Header: `X-INGEST-TOKEN: <INGEST_TOKEN>`
-
 ## Notes
 
 - The API supports `STORAGE_PROVIDER=local` (dev) and `STORAGE_PROVIDER=gcs` (cloud).
 - `/api/pipeline/run` is protected only when `PIPELINE_TOKEN` is set.
 - Web deployment isn’t covered here; simplest is Vercel pointing at the API URL via `API_BASE_URL`.
 - If you only upload once a day, Cloud Run + Scheduler + external Postgres typically stays very cheap; your largest variable cost is usually LLM usage if `OPENAI_API_KEY` is enabled.
+
+---
+
+## Appendix: Cloud SQL (Option B)
+
+Cloud SQL works, but is often not a good fit for a strict hobby budget because it’s easy to pay for 24/7 instance uptime.
+
+### Create Cloud SQL instance
+
+```bash
+export INSTANCE=health-agent-pg
+export DB=health_agent
+
+gcloud services enable sqladmin.googleapis.com
+
+gcloud sql instances create "$INSTANCE" \
+  --database-version=POSTGRES_16 \
+  --region="$REGION" \
+  --edition=ENTERPRISE \
+  --tier=db-custom-1-4096 \
+  --storage-type=SSD \
+  --storage-size=10
+
+gcloud sql databases create $DB --instance=$INSTANCE
+
+gcloud sql users set-password postgres \
+  --instance=$INSTANCE \
+  --password='CHOOSE_A_STRONG_PASSWORD'
+
+export INSTANCE_CONNECTION_NAME=$(gcloud sql instances describe $INSTANCE --format='value(connectionName)')
+echo "$INSTANCE_CONNECTION_NAME"
+```
+
+### Deploy Cloud Run with Cloud SQL attachment
+
+Cloud SQL socket `DATABASE_URL` example:
+
+`postgresql://postgres:PASSWORD@/health_agent?host=/cloudsql/INSTANCE_CONNECTION_NAME&schema=public`
+
+```bash
+gcloud run deploy $SERVICE \
+  --image $IMAGE \
+  --region $REGION \
+  --allow-unauthenticated \
+  --add-cloudsql-instances $INSTANCE_CONNECTION_NAME \
+  --set-env-vars \
+API_PORT=8080,STORAGE_PROVIDER=gcs,STORAGE_BUCKET=$BUCKET,INGEST_TOKEN=REPLACE_ME,PIPELINE_TOKEN=REPLACE_ME,DATABASE_URL='postgresql://postgres:PASSWORD@/health_agent?host=/cloudsql/'$INSTANCE_CONNECTION_NAME'&schema=public'
+```
+
+### Run migrations (Cloud SQL Auth Proxy)
+
+Before running the proxy, ensure you have Application Default Credentials (ADC) set up (this is separate from `gcloud auth login`):
+
+```bash
+gcloud auth application-default login
+gcloud auth application-default set-quota-project $PROJECT_ID
+```
+
+Your user (or service account) also needs `roles/cloudsql.client` on the project.
+
+```bash
+export PROXY_PORT=5433
+cloud-sql-proxy "$INSTANCE_CONNECTION_NAME" --port $PROXY_PORT
+```
+
+In another terminal:
+
+```bash
+read -s CLOUDSQL_POSTGRES_PASSWORD?"Cloud SQL postgres password: " && echo
+export DATABASE_URL="postgresql://postgres:$CLOUDSQL_POSTGRES_PASSWORD@localhost:$PROXY_PORT/health_agent?schema=public"
+pnpm --filter @health-agent/api prisma:deploy
+```

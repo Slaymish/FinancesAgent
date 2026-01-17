@@ -8,6 +8,14 @@ import { writeStorageJson } from "../storage/storage.js";
 
 const bodySchema = z.unknown();
 
+function extractBearerToken(authorizationHeader: unknown): string | null {
+  if (typeof authorizationHeader !== "string") return null;
+  const trimmed = authorizationHeader.trim();
+  if (!trimmed.toLowerCase().startsWith("bearer ")) return null;
+  const token = trimmed.slice("bearer ".length).trim();
+  return token.length ? token : null;
+}
+
 function normalizeJsonBody(body: unknown): unknown {
   if (Buffer.isBuffer(body)) {
     body = body.toString("utf8");
@@ -37,8 +45,10 @@ export async function ingestRoutes(app: FastifyInstance) {
   const env = loadEnv();
 
   app.post("/apple-health", async (req, reply) => {
-    const token = req.headers["x-ingest-token"];
-    if (typeof token !== "string" || token !== env.INGEST_TOKEN) {
+    const headerToken = req.headers["x-ingest-token"];
+    const bearerToken = extractBearerToken(req.headers.authorization);
+    const token = typeof headerToken === "string" ? headerToken : bearerToken;
+    if (!token || token !== env.INGEST_TOKEN) {
       return reply.code(401).send({ error: "unauthorized" });
     }
 

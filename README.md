@@ -35,8 +35,8 @@ Tip: the API loads dotenv from `apps/api/.env`.
 
 ## Key endpoints
 
-- `POST /api/ingest/apple-health` (auth: `X-INGEST-TOKEN`)
-- `POST /api/pipeline/run` (optional auth: `X-PIPELINE-TOKEN` if `PIPELINE_TOKEN` is set)
+- `POST /api/ingest/apple-health` (auth: `X-INGEST-TOKEN` or `Authorization: Bearer <token>`)
+- `POST /api/pipeline/run` (optional auth: `X-PIPELINE-TOKEN` or `Authorization: Bearer <token>` if `PIPELINE_TOKEN` is set)
 - `GET /api/pipeline/latest`
 - `GET /api/insights/latest`
 - `GET /api/data-quality/summary`
@@ -48,12 +48,13 @@ See `.env.example` for the full list. Common ones:
 - `INGEST_TOKEN`
 - `DATABASE_URL`
 - `STORAGE_PROVIDER=local|gcs` (+ `STORAGE_LOCAL_DIR` or `STORAGE_BUCKET`)
-- `OPENAI_API_KEY` + `INSIGHTS_MODEL` (optional)
+- `INSIGHTS_ENABLED` (optional, default false)
+- `OPENAI_API_KEY` + `INSIGHTS_MODEL` (optional; only used when `INSIGHTS_ENABLED=true`)
 - `GOAL_TARGET_WEIGHT_KG` + `GOAL_TARGET_DATE` (optional)
 
 ## Deploy
 
-GCP deployment (Cloud Run + Cloud SQL + GCS + Cloud Scheduler) is documented in [DEPLOY_GCP.md](docs/DEPLOY_GCP.md).
+GCP deployment (Cloud Run + GCS + Cloud Scheduler + external/serverless Postgres like Neon) is documented in [DEPLOY_GCP.md](docs/DEPLOY_GCP.md).
 
 ## Budget mode (<$10/month)
 
@@ -77,4 +78,4 @@ Cloud SQL is convenient, but it’s easy to accidentally pay for **24/7 instance
 - Run API/web on a pay-per-use/free-tier host.
 - This keeps “always-on database VM” costs out of your bill while preserving a Postgres backend for Prisma.
 
-If you stay on GCP, set a Billing budget/alert for Cloud SQL and double-check whether your Cloud SQL instance is HA/regional and whether automated backups/retention are enabled.
+If you choose to use Cloud SQL on GCP anyway, set a Billing budget/alert and double-check whether your instance is HA/regional and whether automated backups/retention are enabled.

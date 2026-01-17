@@ -62,7 +62,7 @@ This is a PNPM workspace monorepo:
 ### Cloud (intended / documented path)
 
 - **API**: Cloud Run (container built by Cloud Build)
-- **Database**: Cloud SQL Postgres
+- **Database**: External/serverless Postgres (e.g. Neon)
 - **Raw ingest storage**: GCS bucket
 - **Pipeline trigger**: Cloud Scheduler hits `/api/pipeline/run` daily
 - **Web**: not explicitly deployed by this repo; simplest is Vercel (or any Next.js host) with `API_BASE_URL` pointing at Cloud Run.
@@ -81,13 +81,29 @@ See `DEPLOY_GCP.md` for the concrete commands.
 
 What happens:
 
-1. Auth via `X-INGEST-TOKEN` header (must match `INGEST_TOKEN` env var).
+1. Auth via `X-INGEST-TOKEN` or `Authorization: Bearer <token>` (must match `INGEST_TOKEN` env var).
 2. The request body is accepted as `unknown` and serialized to JSON.
 3. A SHA-256 checksum is computed over the raw JSON string.
 4. The raw JSON is written to storage at:
    - Local: `storage/local/apple-health/<timestamp>_<checksum>.json`
    - GCS: `gs://<bucket>/apple-health/<timestamp>_<checksum>.json`
 5. An `ingest_files` row is inserted with `processed_at = NULL`.
+
+#### Health Auto Export (REST API) setup
+
+In the Health Auto Export app, configure a REST export like:
+
+- **Method**: `POST`
+- **URL**: `https://YOUR_API_BASE_URL/api/ingest/apple-health`
+- **Headers** (pick one):
+  - `Authorization: Bearer <INGEST_TOKEN>`
+  - OR `X-INGEST-TOKEN: <INGEST_TOKEN>`
+- **Body**: raw JSON (the export file contents)
+
+Notes:
+
+- The API accepts large payloads (Fastify `bodyLimit` is 50MB), but daily exports are usually more reliable than multi-week uploads.
+- Confirm uploads via `GET /api/ingest/status`.
 
 ### 3.2 Pipeline (parse → upsert → metrics → insights)
 
@@ -97,7 +113,7 @@ What happens:
 
 What happens:
 
-1. Optional auth via `X-PIPELINE-TOKEN` if `PIPELINE_TOKEN` is set.
+1. Optional auth via `X-PIPELINE-TOKEN` or `Authorization: Bearer <token>` if `PIPELINE_TOKEN` is set.
 2. Load all `ingest_files` where `processed_at IS NULL`.
 3. For each ingest file:
    - Read raw JSON from storage (`apps/api/src/storage/storage.ts`)
@@ -110,9 +126,9 @@ What happens:
 7. Update the living **insights doc**:
    - If there is no previous doc: create `# Insights\n\n`
    - Else:
-     - If `OPENAI_API_KEY` + `INSIGHTS_MODEL` are configured: ask the model for a unified diff and apply it
-     - Otherwise: skip LLM update and record a warning
-   - Insert a new `insights_docs` row for each pipeline run (even if LLM is skipped/fails)
+     - If `INSIGHTS_ENABLED=true` and `OPENAI_API_KEY` + `INSIGHTS_MODEL` are configured: ask the model for a unified diff and apply it
+     - Otherwise: skip insights generation (off-by-default)
+   - When enabled, a new `insights_docs` row is inserted per pipeline run.
 
 ### 3.3 Read paths (what the web calls)
 
@@ -216,8 +232,10 @@ The repo documents deploying the API to GCP with these pieces:
 
 - **Cloud Build** builds `apps/api/Dockerfile` using `cloudbuild-api.yaml`
 - **Cloud Run** runs the API container
-- **Cloud SQL** hosts Postgres
+- **Serverless/external Postgres** hosts Postgres (recommended for <$10/mo)
 - **GCS** stores raw ingest JSON
+
+See `DEPLOY_GCP.md` for the concrete commands and the low-cost “Option C” path.
 - **Cloud Scheduler** triggers `/api/pipeline/run` daily
 
 Start here:
@@ -254,7 +272,6 @@ If you’re new to the codebase, this is the fastest order to build a mental mod
 - **Dotenv location**: API reads `apps/api/.env` via `apps/api/src/dotenv.ts`.
 - **Storage providers**:
   - `local` and `gcs` are implemented.
-  - `s3` is listed in env schema but currently throws “not implemented”.
 - **ESM imports**: API is ESM (`"type": "module"`), so internal TS imports include `.js` extensions.
 - **Time handling**:
   - Daily tables use UTC-midnight dates.

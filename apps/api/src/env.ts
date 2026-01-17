@@ -9,10 +9,17 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   DATABASE_DIRECT_URL: z.string().optional(),
 
-  STORAGE_PROVIDER: z.enum(["local", "s3", "gcs"]).default("local"),
+  STORAGE_PROVIDER: z.enum(["local", "gcs"]).default("local"),
   STORAGE_LOCAL_DIR: z.string().default("storage/local"),
   STORAGE_BUCKET: z.string().optional(),
 
+  INSIGHTS_ENABLED: z
+    .preprocess((v) => {
+      if (typeof v === "boolean") return v;
+      if (typeof v === "string") return v.toLowerCase() === "true";
+      return undefined;
+    }, z.boolean().optional())
+    .default(false),
   OPENAI_API_KEY: z.string().optional(),
   INSIGHTS_MODEL: z.string().optional(),
 

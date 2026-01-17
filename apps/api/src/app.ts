@@ -6,7 +6,8 @@ import { dataQualityRoutes } from "./routes/dataQuality.js";
 
 export function createApp() {
   const app = Fastify({
-    logger: true
+    logger: true,
+    bodyLimit: 50 * 1024 * 1024
   });
 
   app.get("/health", async () => {

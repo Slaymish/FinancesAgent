@@ -6,6 +6,14 @@ import { parseAppleHealthExport } from "../parsers/appleHealthStub.js";
 import { generateInsightsUnifiedDiff } from "../insights/llm.js";
 import { applyUnifiedDiff } from "../insights/patch.js";
 
+function extractBearerToken(authorizationHeader: unknown): string | null {
+  if (typeof authorizationHeader !== "string") return null;
+  const trimmed = authorizationHeader.trim();
+  if (!trimmed.toLowerCase().startsWith("bearer ")) return null;
+  const token = trimmed.slice("bearer ".length).trim();
+  return token.length ? token : null;
+}
+
 function startOfDayUtc(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
@@ -246,8 +254,10 @@ export async function pipelineRoutes(app: FastifyInstance) {
 
   app.post("/run", async (req, reply) => {
     if (env.PIPELINE_TOKEN) {
-      const token = req.headers["x-pipeline-token"];
-      if (typeof token !== "string" || token !== env.PIPELINE_TOKEN) {
+      const headerToken = req.headers["x-pipeline-token"];
+      const bearerToken = extractBearerToken(req.headers.authorization);
+      const token = typeof headerToken === "string" ? headerToken : bearerToken;
+      if (!token || token !== env.PIPELINE_TOKEN) {
         return reply.code(401).send({ error: "unauthorized" });
       }
     }
@@ -397,47 +407,49 @@ export async function pipelineRoutes(app: FastifyInstance) {
       }
     });
 
-    const prev = await prisma.insightsDoc.findFirst({ orderBy: { createdAt: "desc" } });
+    if (env.INSIGHTS_ENABLED) {
+      const prev = await prisma.insightsDoc.findFirst({ orderBy: { createdAt: "desc" } });
 
-    if (!prev) {
-      await prisma.insightsDoc.create({
-        data: {
-          markdown: "# Insights\n\n",
-          diffFromPrev: null,
-          metricsPack: metricsPackWithGoal,
-          pipelineRunId: run.id
-        }
-      });
-    } else {
-      let nextMarkdown = prev.markdown;
-      let diffFromPrev: string | null = null;
-
-      if (env.OPENAI_API_KEY && env.INSIGHTS_MODEL) {
-        try {
-          const diff = await generateInsightsUnifiedDiff({
-            apiKey: env.OPENAI_API_KEY,
-            model: env.INSIGHTS_MODEL,
-            previousMarkdown: prev.markdown,
-            metricsPack: metricsPackWithGoal
-          });
-
-          nextMarkdown = applyUnifiedDiff({ previous: prev.markdown, patch: diff });
-          diffFromPrev = diff;
-        } catch (err) {
-          warnings.push(`Insights update failed: ${err instanceof Error ? err.message : String(err)}`);
-        }
+      if (!prev) {
+        await prisma.insightsDoc.create({
+          data: {
+            markdown: "# Insights\n\n",
+            diffFromPrev: null,
+            metricsPack: metricsPackWithGoal,
+            pipelineRunId: run.id
+          }
+        });
       } else {
-        warnings.push("Insights update skipped: OPENAI_API_KEY/INSIGHTS_MODEL not configured.");
-      }
+        let nextMarkdown = prev.markdown;
+        let diffFromPrev: string | null = null;
 
-      await prisma.insightsDoc.create({
-        data: {
-          markdown: nextMarkdown,
-          diffFromPrev,
-          metricsPack: metricsPackWithGoal,
-          pipelineRunId: run.id
+        if (env.OPENAI_API_KEY && env.INSIGHTS_MODEL) {
+          try {
+            const diff = await generateInsightsUnifiedDiff({
+              apiKey: env.OPENAI_API_KEY,
+              model: env.INSIGHTS_MODEL,
+              previousMarkdown: prev.markdown,
+              metricsPack: metricsPackWithGoal
+            });
+
+            nextMarkdown = applyUnifiedDiff({ previous: prev.markdown, patch: diff });
+            diffFromPrev = diff;
+          } catch (err) {
+            warnings.push(`Insights update failed: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        } else {
+          warnings.push("Insights enabled but missing OPENAI_API_KEY or INSIGHTS_MODEL.");
         }
-      });
+
+        await prisma.insightsDoc.create({
+          data: {
+            markdown: nextMarkdown,
+            diffFromPrev,
+            metricsPack: metricsPackWithGoal,
+            pipelineRunId: run.id
+          }
+        });
+      }
     }
 
     return reply.code(200).send({
