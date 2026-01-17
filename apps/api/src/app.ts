@@ -10,6 +10,14 @@ export function createApp() {
     bodyLimit: 50 * 1024 * 1024
   });
 
+  app.addContentTypeParser(
+    "application/octet-stream",
+    { parseAs: "buffer" },
+    (req, body, done) => {
+      done(null, body);
+    }
+  );
+
   app.get("/health", async () => {
     return { ok: true };
   });

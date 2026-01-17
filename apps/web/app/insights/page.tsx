@@ -1,3 +1,5 @@
+import { Badge, Card, PageHeader } from "../components/ui";
+
 type InsightsLatestResponse = {
   latest:
     | {
@@ -21,6 +23,11 @@ type InsightsHistoryResponse = {
 
 export const dynamic = "force-dynamic";
 
+function formatDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
 export default async function InsightsPage() {
   const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:3001";
 
@@ -31,10 +38,12 @@ export default async function InsightsPage() {
 
   if (!latestRes.ok || !historyRes.ok) {
     return (
-      <main>
-        <h1>Insights</h1>
-        <p>Failed to load insights from API.</p>
-      </main>
+      <div className="section">
+        <PageHeader title="Insights" description="Weekly synthesis of what changed, why, and what to do next." />
+        <Card title="API unavailable">
+          <p className="muted">Failed to load insights from API.</p>
+        </Card>
+      </div>
     );
   }
 
@@ -42,26 +51,67 @@ export default async function InsightsPage() {
   const history = (await historyRes.json()) as InsightsHistoryResponse;
 
   return (
-    <main>
-      <h1>Insights</h1>
+    <div className="section">
+      <PageHeader
+        title="Insights"
+        description="Context-rich notes generated from the latest pipeline run."
+        meta={
+          latest.latest
+            ? [{ label: "Last updated", value: formatDate(latest.latest.createdAt) }]
+            : [{ label: "Status", value: "No documents yet" }]
+        }
+      />
 
       {!latest.latest ? (
-        <p>No insights docs yet.</p>
+        <Card title="No insights yet">
+          <p className="muted">Once the pipeline runs, you will see synthesized notes and comparisons here.</p>
+        </Card>
       ) : (
         <>
-          <p>
-            Latest: {latest.latest.id} ({latest.latest.createdAt})
-          </p>
-          <h2>Document</h2>
-          <pre>{latest.latest.markdown}</pre>
+          <Card
+            title="Latest insight"
+            subtitle="The newest synthesis with links back to the pipeline."
+            action={<Badge tone="neutral">Doc {latest.latest.id}</Badge>}
+          >
+            <div className="stack">
+              <div className="pill muted">
+                <span className="section-title">Pipeline run</span>
+                <span>{latest.latest.pipelineRunId ?? "n/a"}</span>
+              </div>
+              <div className="code-block">{latest.latest.markdown}</div>
+            </div>
+          </Card>
 
-          <h2>Diff from previous</h2>
-          <pre>{latest.latest.diffFromPrev ?? "(no diff)"}</pre>
+          <Card title="Diff from previous" subtitle="What changed since the last document.">
+            <div className="code-block">{latest.latest.diffFromPrev ?? "(no diff provided)"}</div>
+          </Card>
         </>
       )}
 
-      <h2>History</h2>
-      <pre>{JSON.stringify(history.docs, null, 2)}</pre>
-    </main>
+      <Card title="History" subtitle="Chronological list of documents and their sources.">
+        {history.docs.length === 0 ? (
+          <p className="muted">No history to show yet.</p>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Created</th>
+                <th>Document</th>
+                <th>Pipeline run</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.docs.map((doc) => (
+                <tr key={doc.id}>
+                  <td>{formatDate(doc.createdAt)}</td>
+                  <td>{doc.id}</td>
+                  <td>{doc.pipelineRunId ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
+    </div>
   );
 }

@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import "./globals.css";
+import Nav from "./components/nav";
 
 export const metadata = {
   title: "Health Insights Agent"
@@ -12,11 +14,21 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <nav>
-          <a href="/">Dashboard</a> | <a href="/trends">Trends</a> | <a href="/insights">Insights</a> |{" "}
-          <a href="/data-quality">Data quality</a> | <a href="/metrics">Raw metrics</a>
-        </nav>
-        {children}
+        <div className="background-wash" aria-hidden />
+        <div className="app-shell">
+          <header className="top-bar">
+            <div className="brand">
+              <div className="brand-mark" />
+              <div>
+                <div className="brand-title">Health Agent</div>
+                <div className="brand-subtitle">Personal health signal radar</div>
+              </div>
+            </div>
+            <Nav />
+            <div className="pill muted">Beta</div>
+          </header>
+          <main className="page">{children}</main>
+        </div>
       </body>
     </html>
   );

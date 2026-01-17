@@ -44,7 +44,21 @@ function computeSha256(input: string): string {
 export async function ingestRoutes(app: FastifyInstance) {
   const env = loadEnv();
 
+  // Some exporter apps "test" connectivity with a GET/HEAD-style probe.
+  // Keep this unauthenticated so it can be used as a simple reachability check.
+  app.get("/apple-health", async () => {
+    return { ok: true };
+  });
+
   app.post("/apple-health", async (req, reply) => {
+    req.log.info(
+      {
+        contentType: req.headers["content-type"],
+        contentLength: req.headers["content-length"]
+      },
+      "ingest_request"
+    );
+
     const headerToken = req.headers["x-ingest-token"];
     const bearerToken = extractBearerToken(req.headers.authorization);
     const token = typeof headerToken === "string" ? headerToken : bearerToken;
@@ -54,7 +68,9 @@ export async function ingestRoutes(app: FastifyInstance) {
 
     const parsed = bodySchema.parse(req.body);
     const body = normalizeJsonBody(parsed);
-    const raw = JSON.stringify(body);
+    // JSON.stringify(undefined) returns undefined which would crash hashing.
+    // Treat missing/unparsed bodies as null.
+    const raw = JSON.stringify(body ?? null);
 
     const checksum = computeSha256(raw);
     const receivedAt = new Date();
@@ -74,7 +90,7 @@ export async function ingestRoutes(app: FastifyInstance) {
       }
     });
 
-    return reply.code(201).send({
+    return reply.code(200).send({
       ok: true,
       ingestFileId: ingestFile.id
     });
