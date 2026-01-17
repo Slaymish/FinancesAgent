@@ -1,4 +1,6 @@
 import { Card, Grid, PageHeader, Stat } from "../components/ui";
+import { auth } from "../auth";
+import { demoDataQuality } from "../demo-data";
 
 type DataQualitySummaryResponse = {
   range: { start: string; end: string };
@@ -41,27 +43,36 @@ function renderMissing(label: string, items: string[]) {
 }
 
 export default async function DataQualityPage() {
-  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:3001";
-  const res = await fetch(`${apiBaseUrl}/api/data-quality/summary`);
+  const session = await auth();
+  const isDemo = !session;
 
-  if (!res.ok) {
-    return (
-      <div className="section">
-        <PageHeader title="Data quality" description="Check if the data is fresh, complete, and ready for analysis." />
-        <Card title="API unavailable">
-          <p className="muted">Failed to load from API: {res.status}</p>
-        </Card>
-      </div>
-    );
+  let data: DataQualitySummaryResponse;
+
+  if (isDemo) {
+    data = demoDataQuality as DataQualitySummaryResponse;
+  } else {
+    const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:3001";
+    const res = await fetch(`${apiBaseUrl}/api/data-quality/summary`, { cache: "no-store" });
+
+    if (!res.ok) {
+      return (
+        <div className="section">
+          <PageHeader title="Data quality" description="Check if the data is fresh, complete, and ready for analysis." />
+          <Card title="API unavailable">
+            <p className="muted">Failed to load from API: {res.status}</p>
+          </Card>
+        </div>
+      );
+    }
+
+    data = (await res.json()) as DataQualitySummaryResponse;
   }
-
-  const data = (await res.json()) as DataQualitySummaryResponse;
 
   return (
     <div className="section">
       <PageHeader
         title="Data quality"
-        description="Freshness of ingests, pipeline coverage, and where gaps exist."
+        description={isDemo ? "Demo view: sign in to see your own data checks." : "Freshness of ingests, pipeline coverage, and where gaps exist."}
         meta={[{ label: "Range", value: `${data.range.start.slice(0, 10)} → ${data.range.end.slice(0, 10)}` }]}
       />
 

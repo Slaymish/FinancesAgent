@@ -1,4 +1,6 @@
 import { Badge, Card, PageHeader } from "../components/ui";
+import { auth } from "../auth";
+import { demoInsightsHistory, demoInsightsLatest } from "../demo-data";
 
 type InsightsLatestResponse = {
   latest:
@@ -29,32 +31,43 @@ function formatDate(value: string) {
 }
 
 export default async function InsightsPage() {
-  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:3001";
+  const session = await auth();
+  const isDemo = !session;
 
-  const [latestRes, historyRes] = await Promise.all([
-    fetch(`${apiBaseUrl}/api/insights/latest`),
-    fetch(`${apiBaseUrl}/api/insights/history`)
-  ]);
+  let latest: InsightsLatestResponse;
+  let history: InsightsHistoryResponse;
 
-  if (!latestRes.ok || !historyRes.ok) {
-    return (
-      <div className="section">
-        <PageHeader title="Insights" description="Weekly synthesis of what changed, why, and what to do next." />
-        <Card title="API unavailable">
-          <p className="muted">Failed to load insights from API.</p>
-        </Card>
-      </div>
-    );
+  if (isDemo) {
+    latest = demoInsightsLatest as InsightsLatestResponse;
+    history = demoInsightsHistory as InsightsHistoryResponse;
+  } else {
+    const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:3001";
+
+    const [latestRes, historyRes] = await Promise.all([
+      fetch(`${apiBaseUrl}/api/insights/latest`, { cache: "no-store" }),
+      fetch(`${apiBaseUrl}/api/insights/history`, { cache: "no-store" })
+    ]);
+
+    if (!latestRes.ok || !historyRes.ok) {
+      return (
+        <div className="section">
+          <PageHeader title="Insights" description="Weekly synthesis of what changed, why, and what to do next." />
+          <Card title="API unavailable">
+            <p className="muted">Failed to load insights from API.</p>
+          </Card>
+        </div>
+      );
+    }
+
+    latest = (await latestRes.json()) as InsightsLatestResponse;
+    history = (await historyRes.json()) as InsightsHistoryResponse;
   }
-
-  const latest = (await latestRes.json()) as InsightsLatestResponse;
-  const history = (await historyRes.json()) as InsightsHistoryResponse;
 
   return (
     <div className="section">
       <PageHeader
         title="Insights"
-        description="Context-rich notes generated from the latest pipeline run."
+        description={isDemo ? "Demo view: sign in to see your own weekly synthesis." : "Context-rich notes generated from the latest pipeline run."}
         meta={
           latest.latest
             ? [{ label: "Last updated", value: formatDate(latest.latest.createdAt) }]

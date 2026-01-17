@@ -1,4 +1,6 @@
 import { Badge, Card, Grid, PageHeader, Stat } from "./components/ui";
+import { auth } from "./auth";
+import { demoPipelineLatest } from "./demo-data";
 
 type PipelineLatestResponse = {
   latestRun:
@@ -29,21 +31,28 @@ function describe(value: unknown) {
 }
 
 export default async function HomePage() {
-  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:3001";
-  const res = await fetch(`${apiBaseUrl}/api/pipeline/latest`);
+  const session = await auth();
+  const isDemo = !session;
 
-  if (!res.ok) {
-    return (
-      <div className="section">
-        <PageHeader title="Dashboard" description="Signals that show whether the plan is working and where to focus." />
-        <Card title="API unavailable">
-          <p className="muted">Failed to load from API: {res.status}</p>
-        </Card>
-      </div>
-    );
+  let data: PipelineLatestResponse;
+  if (isDemo) {
+    data = demoPipelineLatest;
+  } else {
+    const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:3001";
+    const res = await fetch(`${apiBaseUrl}/api/pipeline/latest`, { cache: "no-store" });
+    if (!res.ok) {
+      return (
+        <div className="section">
+          <PageHeader title="Dashboard" description="Signals that show whether the plan is working and where to focus." />
+          <Card title="API unavailable">
+            <p className="muted">Failed to load from API: {res.status}</p>
+          </Card>
+        </div>
+      );
+    }
+    data = (await res.json()) as PipelineLatestResponse;
   }
 
-  const data = (await res.json()) as PipelineLatestResponse;
   const pack = data.latestRun?.metricsPack;
 
   const onTrack = pack?.onTrack as
@@ -71,7 +80,11 @@ export default async function HomePage() {
     <div className="section">
       <PageHeader
         title="Dashboard"
-        description="Latest read on whether the plan is on track, how the inputs look, and the levers to pull next."
+        description={
+          isDemo
+            ? "Demo view: sign in to see your own data."
+            : "Latest read on whether the plan is on track, how the inputs look, and the levers to pull next."
+        }
         meta={
           data.latestRun
             ? [{ label: "Last run", value: formatDate(data.latestRun.createdAt) }]

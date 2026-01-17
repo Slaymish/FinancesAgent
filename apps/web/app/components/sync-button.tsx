@@ -1,10 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { useState } from "react";
 
 export default function SyncButton() {
   const router = useRouter();
+  const { data } = useSession();
+  const isAuthed = !!data;
   const [status, setStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
 
@@ -30,8 +33,8 @@ export default function SyncButton() {
 
   return (
     <div className="sync">
-      <button className="button" onClick={runSync} disabled={status === "running"}>
-        {status === "running" ? "Syncing…" : "Run sync"}
+      <button className="button" onClick={runSync} disabled={!isAuthed || status === "running"}>
+        {status === "running" ? "Syncing…" : isAuthed ? "Run sync" : "Sign in to sync"}
       </button>
       {message ? <span className={`sync-message ${status}`}>{message}</span> : null}
     </div>

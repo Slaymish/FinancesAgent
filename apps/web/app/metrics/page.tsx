@@ -1,4 +1,6 @@
 import { Card, PageHeader, Stat } from "../components/ui";
+import { auth } from "../auth";
+import { demoPipelineLatest } from "../demo-data";
 
 type PipelineLatestResponse = {
   latestRun:
@@ -19,25 +21,40 @@ function formatDate(value: string) {
 }
 
 export default async function MetricsPage() {
-  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:3001";
-  const res = await fetch(`${apiBaseUrl}/api/pipeline/latest`);
+  const session = await auth();
+  const isDemo = !session;
+  let data: PipelineLatestResponse;
 
-  if (!res.ok) {
-    return (
-      <div className="section">
-        <PageHeader title="Latest metrics" description="Raw metrics pack direct from the pipeline run." />
-        <Card title="API unavailable">
-          <p className="muted">Failed to load from API: {res.status}</p>
-        </Card>
-      </div>
-    );
+  if (isDemo) {
+    data = demoPipelineLatest as PipelineLatestResponse;
+  } else {
+    const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:3001";
+    const res = await fetch(`${apiBaseUrl}/api/pipeline/latest`, { cache: "no-store" });
+
+    if (!res.ok) {
+      return (
+        <div className="section">
+          <PageHeader title="Latest metrics" description="Raw metrics pack direct from the pipeline run." />
+          <Card title="API unavailable">
+            <p className="muted">Failed to load from API: {res.status}</p>
+          </Card>
+        </div>
+      );
+    }
+
+    data = (await res.json()) as PipelineLatestResponse;
   }
-
-  const data = (await res.json()) as PipelineLatestResponse;
 
   return (
     <div className="section">
-      <PageHeader title="Latest metrics" description="Everything emitted by the most recent run for debugging and exploration." />
+      <PageHeader
+        title="Latest metrics"
+        description={
+          isDemo
+            ? "Demo view: sign in to inspect your own metrics payload."
+            : "Everything emitted by the most recent run for debugging and exploration."
+        }
+      />
 
       {data.latestRun ? (
         <>

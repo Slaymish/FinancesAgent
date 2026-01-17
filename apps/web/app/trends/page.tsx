@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { Card, PageHeader } from "../components/ui";
+import { auth } from "../auth";
+import { demoPipelineLatest } from "../demo-data";
 
 type PipelineLatestResponse = {
   latestRun:
@@ -59,21 +61,29 @@ function SeriesTable<T>({
 }
 
 export default async function TrendsPage() {
-  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:3001";
-  const res = await fetch(`${apiBaseUrl}/api/pipeline/latest`);
+  const session = await auth();
+  const isDemo = !session;
+  let data: PipelineLatestResponse;
 
-  if (!res.ok) {
-    return (
-      <div className="section">
-        <PageHeader title="Trends" description="See how core signals are moving so you can respond early." />
-        <Card title="API unavailable">
-          <p className="muted">Failed to load from API: {res.status}</p>
-        </Card>
-      </div>
-    );
+  if (isDemo) {
+    data = demoPipelineLatest;
+  } else {
+    const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:3001";
+    const res = await fetch(`${apiBaseUrl}/api/pipeline/latest`, { cache: "no-store" });
+
+    if (!res.ok) {
+      return (
+        <div className="section">
+          <PageHeader title="Trends" description="See how core signals are moving so you can respond early." />
+          <Card title="API unavailable">
+            <p className="muted">Failed to load from API: {res.status}</p>
+          </Card>
+        </div>
+      );
+    }
+
+    data = (await res.json()) as PipelineLatestResponse;
   }
-
-  const data = (await res.json()) as PipelineLatestResponse;
   const pack = data.latestRun?.metricsPack;
 
   const weightSeries = (pack?.trends?.weightSeries ?? []) as Array<{ date: string; weightKg: number }>;
@@ -85,7 +95,7 @@ export default async function TrendsPage() {
     <div className="section">
       <PageHeader
         title="Trends"
-        description="Progress over time across weight, nutrition, sleep, and training."
+        description={isDemo ? "Demo view: sign in to see your own time series." : "Progress over time across weight, nutrition, sleep, and training."}
         meta={
           data.latestRun
             ? [{ label: "Last run", value: new Date(data.latestRun.createdAt).toLocaleString() }]
