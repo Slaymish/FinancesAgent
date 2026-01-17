@@ -52,7 +52,7 @@ export default async function DataQualityPage() {
     data = demoDataQuality as DataQualitySummaryResponse;
   } else {
     const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:3001";
-    const res = await fetch(`${apiBaseUrl}/api/data-quality/summary`, { cache: "no-store" });
+    const res = await fetch(`${apiBaseUrl}/api/data-quality/summary`);
 
     if (!res.ok) {
       return (
