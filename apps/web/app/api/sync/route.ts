@@ -7,9 +7,7 @@ export async function POST() {
   try {
     const res = await fetch(`${apiBaseUrl}/api/pipeline/run`, {
       method: "POST",
-      headers: pipelineToken ? { "x-pipeline-token": pipelineToken } : undefined,
-      // Explicitly disable caching; Next 14's Node fetch types omit cache, so cast to keep TS happy.
-      cache: "no-store" as RequestCache
+      headers: pipelineToken ? { "x-pipeline-token": pipelineToken } : undefined
     });
 
     const body = await res.json().catch(() => ({}));
