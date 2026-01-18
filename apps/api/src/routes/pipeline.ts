@@ -5,14 +5,7 @@ import { readStorageJson } from "../storage/storage.js";
 import { parseAppleHealthExport } from "../parsers/appleHealthStub.js";
 import { generateInsightsUnifiedDiff } from "../insights/llm.js";
 import { applyUnifiedDiff } from "../insights/patch.js";
-
-function extractBearerToken(authorizationHeader: unknown): string | null {
-  if (typeof authorizationHeader !== "string") return null;
-  const trimmed = authorizationHeader.trim();
-  if (!trimmed.toLowerCase().startsWith("bearer ")) return null;
-  const token = trimmed.slice("bearer ".length).trim();
-  return token.length ? token : null;
-}
+import { requireUserFromInternalRequest } from "../auth.js";
 
 function startOfDayUtc(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -42,18 +35,24 @@ function linearRegressionSlope(points: Array<{ x: number; y: number }>): number 
   return num / den;
 }
 
-async function computeMetricsPack(now = new Date()) {
+async function computeMetricsPack(userId: string, now = new Date()) {
   const today = startOfDayUtc(now);
   const start28 = addDaysUtc(today, -27);
   const start14 = addDaysUtc(today, -13);
   const start7 = addDaysUtc(today, -6);
 
   const [weights28, nutrition28, workouts28, sleeps28, vitals28] = await Promise.all([
-    prisma.dailyWeight.findMany({ where: { date: { gte: start28, lte: today } }, orderBy: { date: "asc" } }),
-    prisma.dailyNutrition.findMany({ where: { date: { gte: start28, lte: today } }, orderBy: { date: "asc" } }),
-    prisma.workout.findMany({ where: { start: { gte: start28, lte: addDaysUtc(today, 1) } }, orderBy: { start: "asc" } }),
-    prisma.sleepSession.findMany({ where: { start: { gte: start28, lte: addDaysUtc(today, 1) } }, orderBy: { start: "asc" } }),
-    prisma.dailyVitals.findMany({ where: { date: { gte: start28, lte: today } }, orderBy: { date: "asc" } })
+    prisma.dailyWeight.findMany({ where: { userId, date: { gte: start28, lte: today } }, orderBy: { date: "asc" } }),
+    prisma.dailyNutrition.findMany({ where: { userId, date: { gte: start28, lte: today } }, orderBy: { date: "asc" } }),
+    prisma.workout.findMany({
+      where: { userId, start: { gte: start28, lte: addDaysUtc(today, 1) } },
+      orderBy: { start: "asc" }
+    }),
+    prisma.sleepSession.findMany({
+      where: { userId, start: { gte: start28, lte: addDaysUtc(today, 1) } },
+      orderBy: { start: "asc" }
+    }),
+    prisma.dailyVitals.findMany({ where: { userId, date: { gte: start28, lte: today } }, orderBy: { date: "asc" } })
   ]);
 
   const latestWeight = weights28.length ? weights28[weights28.length - 1] : null;
@@ -246,8 +245,12 @@ function sanityWarnings(parsed: ReturnType<typeof parseAppleHealthExport>): stri
 export async function pipelineRoutes(app: FastifyInstance) {
   const env = loadEnv();
 
-  app.get("/latest", async () => {
+  app.get("/latest", async (req, reply) => {
+    const user = await requireUserFromInternalRequest({ req, reply, env });
+    if (!user) return;
+
     const latest = await prisma.pipelineRun.findFirst({
+      where: { userId: user.id },
       orderBy: { createdAt: "desc" }
     });
 
@@ -264,17 +267,11 @@ export async function pipelineRoutes(app: FastifyInstance) {
   });
 
   app.post("/run", async (req, reply) => {
-    if (env.PIPELINE_TOKEN) {
-      const headerToken = req.headers["x-pipeline-token"];
-      const bearerToken = extractBearerToken(req.headers.authorization);
-      const token = typeof headerToken === "string" ? headerToken : bearerToken;
-      if (!token || token !== env.PIPELINE_TOKEN) {
-        return reply.code(401).send({ error: "unauthorized" });
-      }
-    }
+    const user = await requireUserFromInternalRequest({ req, reply, env, allowPipelineToken: true });
+    if (!user) return;
 
     const unprocessed = await prisma.ingestFile.findMany({
-      where: { processedAt: null },
+      where: { userId: user.id, processedAt: null },
       orderBy: { receivedAt: "asc" }
     });
 
@@ -287,18 +284,17 @@ export async function pipelineRoutes(app: FastifyInstance) {
       warnings.push(...parsed.warnings);
       warnings.push(...sanityWarnings(parsed));
 
-      // Upsert canonical rows (currently no-op until parser is implemented)
       await prisma.$transaction([
         ...parsed.rows.dailyWeights.map((row) =>
           prisma.dailyWeight.upsert({
-            where: { date: row.date },
+            where: { userId_date: { userId: user.id, date: row.date } },
             update: { weightKg: row.weightKg },
-            create: { date: row.date, weightKg: row.weightKg }
+            create: { userId: user.id, date: row.date, weightKg: row.weightKg }
           })
         ),
         ...parsed.rows.dailyNutrition.map((row) =>
           prisma.dailyNutrition.upsert({
-            where: { date: row.date },
+            where: { userId_date: { userId: user.id, date: row.date } },
             update: {
               calories: row.calories ?? null,
               proteinG: row.proteinG ?? null,
@@ -308,6 +304,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
               alcoholG: row.alcoholG ?? null
             },
             create: {
+              userId: user.id,
               date: row.date,
               calories: row.calories ?? null,
               proteinG: row.proteinG ?? null,
@@ -321,7 +318,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
         ...parsed.rows.workouts.map((row) =>
           row.sourceId
             ? prisma.workout.upsert({
-                where: { sourceId: row.sourceId },
+                where: { userId_sourceId: { userId: user.id, sourceId: row.sourceId } },
                 update: {
                   start: row.start,
                   type: row.type,
@@ -332,6 +329,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
                   avgPace: row.avgPace ?? null
                 },
                 create: {
+                  userId: user.id,
                   sourceId: row.sourceId,
                   start: row.start,
                   type: row.type,
@@ -344,6 +342,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
               })
             : prisma.workout.create({
                 data: {
+                  userId: user.id,
                   start: row.start,
                   type: row.type,
                   durationMin: row.durationMin,
@@ -357,7 +356,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
         ...parsed.rows.sleepSessions.map((row) =>
           row.dedupeKey
             ? prisma.sleepSession.upsert({
-                where: { dedupeKey: row.dedupeKey },
+                where: { userId_dedupeKey: { userId: user.id, dedupeKey: row.dedupeKey } },
                 update: {
                   start: row.start,
                   end: row.end,
@@ -365,6 +364,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
                   quality: row.quality ?? null
                 },
                 create: {
+                  userId: user.id,
                   dedupeKey: row.dedupeKey,
                   start: row.start,
                   end: row.end,
@@ -374,6 +374,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
               })
             : prisma.sleepSession.create({
                 data: {
+                  userId: user.id,
                   start: row.start,
                   end: row.end,
                   durationMin: row.durationMin,
@@ -383,12 +384,13 @@ export async function pipelineRoutes(app: FastifyInstance) {
         ),
         ...parsed.rows.dailyVitals.map((row) =>
           prisma.dailyVitals.upsert({
-            where: { date: row.date },
+            where: { userId_date: { userId: user.id, date: row.date } },
             update: {
               restingHr: row.restingHr ?? null,
               hrv: row.hrv ?? null
             },
             create: {
+              userId: user.id,
               date: row.date,
               restingHr: row.restingHr ?? null,
               hrv: row.hrv ?? null
@@ -404,7 +406,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
       processedCount += 1;
     }
 
-    const metricsPack = await computeMetricsPack();
+    const metricsPack = await computeMetricsPack(user.id);
     const goalProjection = computeGoalProjection({ env, metricsPack: metricsPack as any });
     const metricsPackWithGoal = {
       ...(metricsPack as any),
@@ -413,18 +415,20 @@ export async function pipelineRoutes(app: FastifyInstance) {
 
     const run = await prisma.pipelineRun.create({
       data: {
+        userId: user.id,
         metricsPack: metricsPackWithGoal,
         processedIngestCount: processedCount
       }
     });
 
     if (env.INSIGHTS_ENABLED) {
-      const prev = await prisma.insightsDoc.findFirst({ orderBy: { createdAt: "desc" } });
+      const prev = await prisma.insightsDoc.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "desc" } });
 
       if (!prev) {
         await prisma.insightsDoc.create({
           data: {
-            markdown: "# Insights\n\n",
+            userId: user.id,
+            markdown: "## Weekly synthesis\n- Awaiting next update.\n",
             diffFromPrev: null,
             metricsPack: metricsPackWithGoal,
             pipelineRunId: run.id
@@ -454,6 +458,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
 
         await prisma.insightsDoc.create({
           data: {
+            userId: user.id,
             markdown: nextMarkdown,
             diffFromPrev,
             metricsPack: metricsPackWithGoal,

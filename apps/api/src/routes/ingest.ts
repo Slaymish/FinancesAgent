@@ -5,16 +5,9 @@ import path from "node:path";
 import { prisma } from "../prisma.js";
 import { loadEnv } from "../env.js";
 import { writeStorageJson } from "../storage/storage.js";
+import { extractBearerToken, findUserByIngestToken, requireUserFromInternalRequest } from "../auth.js";
 
 const bodySchema = z.unknown();
-
-function extractBearerToken(authorizationHeader: unknown): string | null {
-  if (typeof authorizationHeader !== "string") return null;
-  const trimmed = authorizationHeader.trim();
-  if (!trimmed.toLowerCase().startsWith("bearer ")) return null;
-  const token = trimmed.slice("bearer ".length).trim();
-  return token.length ? token : null;
-}
 
 function normalizeJsonBody(body: unknown): unknown {
   if (Buffer.isBuffer(body)) {
@@ -62,7 +55,8 @@ export async function ingestRoutes(app: FastifyInstance) {
     const headerToken = req.headers["x-ingest-token"];
     const bearerToken = extractBearerToken(req.headers.authorization);
     const token = typeof headerToken === "string" ? headerToken : bearerToken;
-    if (!token || token !== env.INGEST_TOKEN) {
+    const user = token ? await findUserByIngestToken(token, env) : null;
+    if (!token || !user) {
       return reply.code(401).send({ error: "unauthorized" });
     }
 
@@ -76,12 +70,13 @@ export async function ingestRoutes(app: FastifyInstance) {
     const receivedAt = new Date();
 
     const filename = `${receivedAt.toISOString()}_${checksum}.json`.replaceAll(":", "-");
-    const storageKey = path.join("apple-health", filename);
+    const storageKey = path.join("apple-health", user.id, filename);
 
     await writeStorageJson({ env, storageKey, rawJson: raw });
 
     const ingestFile = await prisma.ingestFile.create({
       data: {
+        userId: user.id,
         source: "apple-health",
         receivedAt,
         checksum,
@@ -96,8 +91,12 @@ export async function ingestRoutes(app: FastifyInstance) {
     });
   });
 
-  app.get("/status", async () => {
+  app.get("/status", async (req, reply) => {
+    const user = await requireUserFromInternalRequest({ req, reply, env });
+    if (!user) return;
+
     const last = await prisma.ingestFile.findFirst({
+      where: { userId: user.id },
       orderBy: { receivedAt: "desc" }
     });
 

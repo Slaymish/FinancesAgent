@@ -1,5 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../prisma.js";
+import { requireUserFromInternalRequest } from "../auth.js";
+import { loadEnv } from "../env.js";
 
 function startOfDayUtc(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -14,19 +16,24 @@ function dateKeyUtc(date: Date): string {
 }
 
 export async function dataQualityRoutes(app: FastifyInstance) {
-  app.get("/summary", async () => {
+  const env = loadEnv();
+
+  app.get("/summary", async (req, reply) => {
+    const user = await requireUserFromInternalRequest({ req, reply, env });
+    if (!user) return;
+
     const now = new Date();
     const today = startOfDayUtc(now);
     const start14 = addDaysUtc(today, -13);
 
     const [lastIngest, lastRun, weights, nutrition, vitals, sleeps, workouts] = await Promise.all([
-      prisma.ingestFile.findFirst({ orderBy: { receivedAt: "desc" } }),
-      prisma.pipelineRun.findFirst({ orderBy: { createdAt: "desc" } }),
-      prisma.dailyWeight.findMany({ where: { date: { gte: start14, lte: today } } }),
-      prisma.dailyNutrition.findMany({ where: { date: { gte: start14, lte: today } } }),
-      prisma.dailyVitals.findMany({ where: { date: { gte: start14, lte: today } } }),
-      prisma.sleepSession.findMany({ where: { start: { gte: start14, lte: addDaysUtc(today, 1) } } }),
-      prisma.workout.findMany({ where: { start: { gte: start14, lte: addDaysUtc(today, 1) } } })
+      prisma.ingestFile.findFirst({ where: { userId: user.id }, orderBy: { receivedAt: "desc" } }),
+      prisma.pipelineRun.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "desc" } }),
+      prisma.dailyWeight.findMany({ where: { userId: user.id, date: { gte: start14, lte: today } } }),
+      prisma.dailyNutrition.findMany({ where: { userId: user.id, date: { gte: start14, lte: today } } }),
+      prisma.dailyVitals.findMany({ where: { userId: user.id, date: { gte: start14, lte: today } } }),
+      prisma.sleepSession.findMany({ where: { userId: user.id, start: { gte: start14, lte: addDaysUtc(today, 1) } } }),
+      prisma.workout.findMany({ where: { userId: user.id, start: { gte: start14, lte: addDaysUtc(today, 1) } } })
     ]);
 
     const expectedDates: string[] = [];

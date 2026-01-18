@@ -81,13 +81,13 @@ See `DEPLOY_GCP.md` for the concrete commands.
 
 What happens:
 
-1. Auth via `X-INGEST-TOKEN` or `Authorization: Bearer <token>` (must match `INGEST_TOKEN` env var).
+1. Auth via `X-INGEST-TOKEN` or `Authorization: Bearer <token>` (per-user token from the `/connect` page; legacy `INGEST_TOKEN` is only used for the seeded user).
 2. The request body is accepted as `unknown` and serialized to JSON.
 3. A SHA-256 checksum is computed over the raw JSON string.
 4. The raw JSON is written to storage at:
-   - Local: `storage/local/apple-health/<timestamp>_<checksum>.json`
-   - GCS: `gs://<bucket>/apple-health/<timestamp>_<checksum>.json`
-5. An `ingest_files` row is inserted with `processed_at = NULL`.
+   - Local: `storage/local/apple-health/<user_id>/<timestamp>_<checksum>.json`
+   - GCS: `gs://<bucket>/apple-health/<user_id>/<timestamp>_<checksum>.json`
+5. An `ingest_files` row is inserted with `processed_at = NULL` and `user_id` set.
 
 #### Health Auto Export (REST API) setup
 
@@ -96,14 +96,15 @@ In the Health Auto Export app, configure a REST export like:
 - **Method**: `POST`
 - **URL**: `https://YOUR_API_BASE_URL/api/ingest/apple-health`
 - **Headers** (pick one):
-  - `Authorization: Bearer <INGEST_TOKEN>`
-  - OR `X-INGEST-TOKEN: <INGEST_TOKEN>`
+  - `Authorization: Bearer <YOUR_PERSONAL_INGEST_TOKEN>`
+  - OR `X-INGEST-TOKEN: <YOUR_PERSONAL_INGEST_TOKEN>`
 - **Body**: raw JSON (the export file contents)
 
 Notes:
 
 - The API accepts large payloads (Fastify `bodyLimit` is 50MB), but daily exports are usually more reliable than multi-week uploads.
-- Confirm uploads via `GET /api/ingest/status`.
+- Generate/regenerate your token from the web app at `/connect`.
+- Confirm uploads via `GET /api/ingest/status` with `x-internal-api-key` + `x-user-id` headers.
 
 ### 3.2 Pipeline (parse → upsert → metrics → insights)
 
@@ -113,8 +114,8 @@ Notes:
 
 What happens:
 
-1. Optional auth via `X-PIPELINE-TOKEN` or `Authorization: Bearer <token>` if `PIPELINE_TOKEN` is set.
-2. Load all `ingest_files` where `processed_at IS NULL`.
+1. Auth via `X-INTERNAL-API-KEY` + `X-USER-ID` (or `X-PIPELINE-TOKEN` + `X-USER-ID`).
+2. Load all `ingest_files` for that user where `processed_at IS NULL`.
 3. For each ingest file:
    - Read raw JSON from storage (`apps/api/src/storage/storage.ts`)
    - Parse into canonical rows via `parseAppleHealthExport` (currently re-exporting `parseHealthAutoExport`)
@@ -136,6 +137,8 @@ What happens:
 - `GET /api/insights/latest` — latest insights doc (`apps/api/src/routes/insights.ts`)
 - `GET /api/insights/history` — last 50 insight doc headers (`apps/api/src/routes/insights.ts`)
 - `GET /api/data-quality/summary` — missing days across last 14 days (`apps/api/src/routes/dataQuality.ts`)
+
+All read paths expect `x-internal-api-key` + `x-user-id` headers and return data scoped to that user.
 
 ---
 
@@ -190,6 +193,7 @@ cp .env.example apps/api/.env
 ```
 
 Defaults are already set for local Postgres + local raw storage.
+To enable LLM-backed insights, set `INSIGHTS_ENABLED=true` and fill in `OPENAI_API_KEY` + `INSIGHTS_MODEL` (e.g. `gpt-4o-mini`) in `apps/api/.env`. Keep the key server-side; the Next.js app never needs it.
 
 ### 5.4 Run dev servers
 
@@ -245,7 +249,7 @@ Start here:
 Key notes:
 
 - Cloud Run container sets `API_PORT=8080` (see `apps/api/Dockerfile`).
-- When deploying, set real values for `INGEST_TOKEN`, `PIPELINE_TOKEN`, and `DATABASE_URL`.
+- When deploying, set real values for `INTERNAL_API_KEY`, `INGEST_TOKEN` (legacy), `PIPELINE_TOKEN` (if used), `DATABASE_URL`, `NEXTAUTH_SECRET`, and GitHub OAuth creds.
 - Prefer Secret Manager (`--set-secrets`) over `--set-env-vars` for secrets.
 - Grant the Cloud Run service account bucket permissions (object admin) for raw storage.
 

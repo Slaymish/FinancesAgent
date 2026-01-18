@@ -2,6 +2,7 @@ import { Card, PageHeader, Stat } from "../components/ui";
 import { demoPipelineLatest } from "../demo-data";
 import { formatDateTime } from "../lib/format";
 import { getSessionOrNull } from "../lib/session";
+import { fetchUserApi } from "../lib/api-client";
 
 type PipelineLatestResponse = {
   latestRun:
@@ -24,10 +25,8 @@ export default async function MetricsPage() {
   if (isDemo) {
     data = demoPipelineLatest as PipelineLatestResponse;
   } else {
-    const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:3001";
-    const res = await fetch(`${apiBaseUrl}/api/pipeline/latest`, { cache: "no-store" });
-
-    if (!res.ok) {
+    const res = await fetchUserApi<PipelineLatestResponse>(session, "/api/pipeline/latest");
+    if (!res.ok || !res.data) {
       return (
         <div className="section">
           <PageHeader title="Latest metrics" description="Raw metrics pack direct from the pipeline run." />
@@ -37,8 +36,7 @@ export default async function MetricsPage() {
         </div>
       );
     }
-
-    data = (await res.json()) as PipelineLatestResponse;
+    data = res.data;
   }
 
   return (

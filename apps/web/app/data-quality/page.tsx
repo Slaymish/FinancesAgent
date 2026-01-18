@@ -2,6 +2,7 @@ import { Badge, Card, Grid, PageHeader, Stat } from "../components/ui";
 import { demoDataQuality } from "../demo-data";
 import { formatDateTime } from "../lib/format";
 import { getSessionOrNull } from "../lib/session";
+import { fetchUserApi } from "../lib/api-client";
 
 type DataQualitySummaryResponse = {
   range: { start: string; end: string };
@@ -46,10 +47,9 @@ export default async function DataQualityPage() {
   if (isDemo) {
     data = demoDataQuality as DataQualitySummaryResponse;
   } else {
-    const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:3001";
-    const res = await fetch(`${apiBaseUrl}/api/data-quality/summary`, { cache: "no-store" });
+    const res = await fetchUserApi<DataQualitySummaryResponse>(session, "/api/data-quality/summary");
 
-    if (!res.ok) {
+    if (!res.ok || !res.data) {
       return (
         <div className="section">
           <PageHeader title="Data quality" description="Check if the data is fresh, complete, and ready for analysis." />
@@ -60,7 +60,7 @@ export default async function DataQualityPage() {
       );
     }
 
-    data = (await res.json()) as DataQualitySummaryResponse;
+    data = res.data;
   }
 
   return (

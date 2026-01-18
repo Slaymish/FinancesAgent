@@ -3,6 +3,7 @@ import { Badge, Card, Grid, PageHeader, Stat } from "./components/ui";
 import { demoPipelineLatest } from "./demo-data";
 import { formatDateTime, formatDelta, formatMinutes, formatNumber, type DeltaTone } from "./lib/format";
 import { getSessionOrNull } from "./lib/session";
+import { fetchUserApi } from "./lib/api-client";
 
 type PipelineLatestResponse = {
   latestRun:
@@ -102,9 +103,8 @@ export default async function HomePage() {
   if (isDemo) {
     data = demoPipelineLatest;
   } else {
-    const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:3001";
-    const res = await fetch(`${apiBaseUrl}/api/pipeline/latest`, { cache: "no-store" });
-    if (!res.ok) {
+    const res = await fetchUserApi<PipelineLatestResponse>(session, "/api/pipeline/latest");
+    if (!res.ok || !res.data) {
       return (
         <div className="section">
           <PageHeader title="Status" description="Signals that show whether the plan is working and where to focus next." />
@@ -114,7 +114,7 @@ export default async function HomePage() {
         </div>
       );
     }
-    data = (await res.json()) as PipelineLatestResponse;
+    data = res.data;
   }
 
   const pack = data.latestRun?.metricsPack;
@@ -324,7 +324,7 @@ export default async function HomePage() {
           <Grid columns={2}>
             <Card
               title="Status"
-              subtitle="Lead with the goal: direction and projected timeline."
+              subtitle="Goal progress and the projected timeline."
               action={<Badge tone={goalBadge.tone}>{goalBadge.label}</Badge>}
             >
               <div className="stack">
@@ -370,7 +370,7 @@ export default async function HomePage() {
             </div>
           </Card>
 
-          <Card title="What changed since last week" subtitle="Claim → evidence → lever, kept short.">
+          <Card title="What changed since last week" subtitle="Changes from last week with links to evidence.">
             <ul className="change-list">
               {changeSummary.map((item) => (
                 <ChangeItem key={item.title} title={item.title} detail={item.detail} tone={item.tone} link={item.link} />

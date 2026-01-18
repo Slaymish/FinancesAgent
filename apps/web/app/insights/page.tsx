@@ -3,6 +3,7 @@ import { Badge, Card, PageHeader } from "../components/ui";
 import { demoInsightsHistory, demoInsightsLatest } from "../demo-data";
 import { formatDateTime } from "../lib/format";
 import { getSessionOrNull } from "../lib/session";
+import { fetchUserApi } from "../lib/api-client";
 
 type InsightsLatestResponse = {
   latest:
@@ -70,8 +71,11 @@ function parseDiff(diff: string | null | undefined): DiffItem[] {
     })
     .map((line) => {
       const tone: DiffItem["tone"] = line.startsWith("-") ? "attention" : line.startsWith("+") ? "positive" : "neutral";
-      return { text: line.replace(/^[-+]\s*/, ""), tone };
-    });
+      const text = line.replace(/^[-+]\s*/, "").trim();
+      return { text, tone };
+    })
+    .filter((item) => item.text.length > 0)
+    .filter((item) => !item.text.startsWith("#"));
 }
 
 function toneClassName(tone: DiffItem["tone"]) {
@@ -92,14 +96,12 @@ export default async function InsightsPage() {
     latest = demoInsightsLatest as InsightsLatestResponse;
     history = demoInsightsHistory as InsightsHistoryResponse;
   } else {
-    const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:3001";
-
     const [latestRes, historyRes] = await Promise.all([
-      fetch(`${apiBaseUrl}/api/insights/latest`, { cache: "no-store" }),
-      fetch(`${apiBaseUrl}/api/insights/history`, { cache: "no-store" })
+      fetchUserApi<InsightsLatestResponse>(session, "/api/insights/latest"),
+      fetchUserApi<InsightsHistoryResponse>(session, "/api/insights/history")
     ]);
 
-    if (!latestRes.ok || !historyRes.ok) {
+    if (!latestRes.ok || !latestRes.data || !historyRes.ok || !historyRes.data) {
       return (
         <div className="section">
           <PageHeader title="Review" description="Weekly synthesis of what changed, why, and what to do next." />
@@ -110,8 +112,8 @@ export default async function InsightsPage() {
       );
     }
 
-    latest = (await latestRes.json()) as InsightsLatestResponse;
-    history = (await historyRes.json()) as InsightsHistoryResponse;
+    latest = latestRes.data;
+    history = historyRes.data;
   }
 
   const diffItems = parseDiff(latest.latest?.diffFromPrev);
@@ -120,7 +122,7 @@ export default async function InsightsPage() {
     <div className="section">
       <PageHeader
         title="Review"
-        description={isDemo ? "Demo view: sign in to see your own weekly synthesis." : "Narrative first: claim → evidence → lever."}
+        description={isDemo ? "Demo view: sign in to see your own weekly synthesis." : "Weekly summary of what changed and where to adjust."}
         meta={
           latest.latest
             ? [{ label: "Last updated", value: formatDateTime(latest.latest.createdAt) }]
@@ -141,7 +143,7 @@ export default async function InsightsPage() {
         <>
           <Card
             title="Weekly synthesis"
-            subtitle="Lead with the narrative; numbers back it up."
+            subtitle="Overview with the notes and supporting numbers in one place."
             action={<Badge tone="neutral">Doc {latest.latest.id}</Badge>}
           >
             <div className="stack">
@@ -156,7 +158,7 @@ export default async function InsightsPage() {
             </div>
           </Card>
 
-          <Card title="What changed vs last week" subtitle="Diffs are brief and traceable.">
+          <Card title="What changed vs last week" subtitle="Brief diffs with links to evidence.">
             <div className="stack">
               {diffItems.length ? (
                 <ul className="change-list">

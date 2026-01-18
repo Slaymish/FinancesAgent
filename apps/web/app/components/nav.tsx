@@ -7,7 +7,9 @@ import { useEffect } from "react";
 const links = [
   { href: "/", label: "Status" },
   { href: "/insights", label: "Review" },
-  { href: "/trends", label: "Trends" }
+  { href: "/trends", label: "Trends" },
+  { href: "/data-quality", label: "Data" },
+  { href: "/connect", label: "Connect" }
 ];
 
 export default function Nav() {

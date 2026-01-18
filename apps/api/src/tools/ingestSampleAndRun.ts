@@ -7,6 +7,7 @@ import { loadDotenv } from "../dotenv.js";
 import { loadEnv } from "../env.js";
 import { prisma } from "../prisma.js";
 import { createApp } from "../app.js";
+import { LEGACY_USER_ID, ensureLegacyUser } from "../auth.js";
 
 function sha256(input: string): string {
   return crypto.createHash("sha256").update(input).digest("hex");
@@ -14,6 +15,7 @@ function sha256(input: string): string {
 
 async function seedIngestFromFile(opts: { filePath: string }) {
   const env = loadEnv();
+  await ensureLegacyUser(env);
   if (env.STORAGE_PROVIDER !== "local") {
     throw new Error(`STORAGE_PROVIDER '${env.STORAGE_PROVIDER}' not supported by seed script`);
   }
@@ -23,7 +25,7 @@ async function seedIngestFromFile(opts: { filePath: string }) {
   const checksum = sha256(raw);
 
   const filename = `${receivedAt.toISOString()}_${checksum}.json`.replaceAll(":", "-");
-  const storageKey = path.join("apple-health", filename);
+  const storageKey = path.join("apple-health", LEGACY_USER_ID, filename);
 
   const storageRoot = env.STORAGE_LOCAL_DIR;
   const fullPath = path.join(storageRoot, storageKey);
@@ -32,13 +34,14 @@ async function seedIngestFromFile(opts: { filePath: string }) {
   await fs.writeFile(fullPath, raw, "utf8");
 
   const ingestFile = await prisma.ingestFile.upsert({
-    where: { source_checksum: { source: "apple-health", checksum } },
+    where: { userId_source_checksum: { userId: LEGACY_USER_ID, source: "apple-health", checksum } },
     update: {
       storageKey,
       receivedAt,
       processedAt: null
     },
     create: {
+      userId: LEGACY_USER_ID,
       source: "apple-health",
       checksum,
       storageKey,
@@ -70,10 +73,15 @@ async function run() {
   const seeded = await seedIngestFromFile({ filePath: inputPath });
 
   const app = createApp();
+  const pipelineHeaders: Record<string, string> = {
+    "x-user-id": LEGACY_USER_ID,
+    "x-internal-api-key": env.INTERNAL_API_KEY
+  };
+  if (env.PIPELINE_TOKEN) pipelineHeaders["x-pipeline-token"] = env.PIPELINE_TOKEN;
   const pipeline = await app.inject({
     method: "POST",
     url: "/api/pipeline/run",
-    headers: env.PIPELINE_TOKEN ? { "x-pipeline-token": env.PIPELINE_TOKEN } : undefined
+    headers: pipelineHeaders
   });
   await app.close();
 

@@ -4,6 +4,7 @@ import { Card, PageHeader } from "../components/ui";
 import { demoPipelineLatest } from "../demo-data";
 import { formatDateTime, formatDelta, formatMinutes, formatNumber } from "../lib/format";
 import { getSessionOrNull } from "../lib/session";
+import { fetchUserApi } from "../lib/api-client";
 
 type PipelineLatestResponse = {
   latestRun:
@@ -114,10 +115,9 @@ export default async function TrendsPage() {
   if (isDemo) {
     data = demoPipelineLatest;
   } else {
-    const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:3001";
-    const res = await fetch(`${apiBaseUrl}/api/pipeline/latest`, { cache: "no-store" });
+    const res = await fetchUserApi<PipelineLatestResponse>(session, "/api/pipeline/latest");
 
-    if (!res.ok) {
+    if (!res.ok || !res.data) {
       return (
         <div className="section">
           <PageHeader title="Trends" description="See how core signals are moving so you can respond early." />
@@ -128,7 +128,7 @@ export default async function TrendsPage() {
       );
     }
 
-    data = (await res.json()) as PipelineLatestResponse;
+    data = res.data;
   }
   const pack = data.latestRun?.metricsPack;
 
@@ -174,7 +174,7 @@ export default async function TrendsPage() {
     <div className="section">
       <PageHeader
         title="Trends"
-        description={isDemo ? "Demo view: sign in to see your own time series." : "Headline signals first; details tucked away."}
+        description={isDemo ? "Demo view: sign in to see your own time series." : "Key trends with quick deltas and supporting detail."}
         meta={
           data.latestRun
             ? [{ label: "Last run", value: formatDateTime(data.latestRun.createdAt) }]

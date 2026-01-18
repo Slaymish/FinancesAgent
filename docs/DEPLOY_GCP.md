@@ -114,7 +114,8 @@ This will push:
 
 Set these env vars (pick strong random tokens):
 
-- `INGEST_TOKEN` (used by exporter app)
+- `INTERNAL_API_KEY` (shared between API and web; required on all reads)
+- `INGEST_TOKEN` (optional legacy fallback; new users get per-user tokens from the web app)
 - `PIPELINE_TOKEN` (used by Cloud Scheduler)
 
 Do not commit real tokens/passwords into this repo. Use placeholders locally and set real values in Cloud Run.
@@ -134,7 +135,7 @@ gcloud run deploy $SERVICE \
   --min-instances 0 \
   --max-instances 1 \
   --set-env-vars \
-API_PORT=8080,STORAGE_PROVIDER=gcs,STORAGE_BUCKET=$BUCKET,INGEST_TOKEN=REPLACE_ME,PIPELINE_TOKEN=REPLACE_ME,INSIGHTS_ENABLED=false,DATABASE_URL='REPLACE_WITH_PROVIDER_URL'
+API_PORT=8080,STORAGE_PROVIDER=gcs,STORAGE_BUCKET=$BUCKET,INGEST_TOKEN=REPLACE_ME,INTERNAL_API_KEY=REPLACE_ME,PIPELINE_TOKEN=REPLACE_ME,INSIGHTS_ENABLED=false,DATABASE_URL='REPLACE_WITH_PROVIDER_URL'
 ```
 
 ### Low-cost Cloud Run settings (recommended)
@@ -187,7 +188,7 @@ Get the Cloud Run URL:
 export API_URL=$(gcloud run services describe $SERVICE --region $REGION --format='value(status.url)')
 ```
 
-Create a scheduler job that hits `/api/pipeline/run` with `X-PIPELINE-TOKEN` (or use `Authorization: Bearer <PIPELINE_TOKEN>` if you prefer):
+Create a scheduler job that hits `/api/pipeline/run` with `X-PIPELINE-TOKEN` **and** `X-USER-ID` (one job per user; you can also use `X-INTERNAL-API-KEY` instead of `X-PIPELINE-TOKEN` if you prefer):
 
 ```bash
 gcloud scheduler jobs create http health-agent-daily-pipeline \
@@ -196,14 +197,14 @@ gcloud scheduler jobs create http health-agent-daily-pipeline \
   --time-zone "UTC" \
   --uri "$API_URL/api/pipeline/run" \
   --http-method POST \
-  --headers "X-PIPELINE-TOKEN=REPLACE_ME" \
+  --headers "X-PIPELINE-TOKEN=REPLACE_ME,X-USER-ID=REPLACE_USER_ID" \
   --attempt-deadline 10m
 ```
 
 ## Notes
 
 - The API supports `STORAGE_PROVIDER=local` (dev) and `STORAGE_PROVIDER=gcs` (cloud).
-- `/api/pipeline/run` is protected only when `PIPELINE_TOKEN` is set.
+- `/api/pipeline/run` requires `x-user-id` plus either `x-internal-api-key` or `x-pipeline-token`.
 - Web deployment isn’t covered here; simplest is Vercel pointing at the API URL via `API_BASE_URL`.
 - If you only upload once a day, Cloud Run + Scheduler + external Postgres typically stays very cheap; your largest variable cost is usually LLM usage if `OPENAI_API_KEY` is enabled.
 

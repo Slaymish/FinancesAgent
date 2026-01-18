@@ -5,6 +5,7 @@ HealthAgent ingests daily Apple Health exports (e.g. Health Auto Export JSON), s
 - API: Fastify + Prisma (Postgres)
 - Web: Next.js App Router
 - Raw storage: local disk (dev) or GCS (cloud)
+- Auth: NextAuth (GitHub) with per-user ingest tokens and user-scoped data
 
 For a deeper “how it works” walkthrough, see [ONBOARDING.md](docs/ONBOARDING.md).
 
@@ -25,6 +26,7 @@ pnpm db:generate
 pnpm db:migrate
 
 cp .env.example apps/api/.env
+cp .env.example .env
 pnpm dev
 ```
 
@@ -32,25 +34,35 @@ pnpm dev
 - Web: http://localhost:3000
 
 Tip: the API loads dotenv from `apps/api/.env`.
+Make sure `INTERNAL_API_KEY` matches in both `.env` files and set `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` to enable sign-in.
 
 ## Key endpoints
 
-- `POST /api/ingest/apple-health` (auth: `X-INGEST-TOKEN` or `Authorization: Bearer <token>`)
-- `POST /api/pipeline/run` (optional auth: `X-PIPELINE-TOKEN` or `Authorization: Bearer <token>` if `PIPELINE_TOKEN` is set)
-- `GET /api/pipeline/latest`
-- `GET /api/insights/latest`
-- `GET /api/data-quality/summary`
+- `POST /api/ingest/apple-health` (auth: per-user `X-INGEST-TOKEN` or `Authorization: Bearer <token>`)
+- `POST /api/pipeline/run` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`, or `X-PIPELINE-TOKEN` + `X-USER-ID`)
+- `GET /api/pipeline/latest` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
+- `GET /api/insights/latest` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
+- `GET /api/data-quality/summary` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
 
 ## Config (API)
 
 See `.env.example` for the full list. Common ones:
 
 - `INGEST_TOKEN`
+- `INTERNAL_API_KEY`
+- `API_BASE_URL` (for the web app to call the API)
+- `NEXTAUTH_SECRET` + `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` (web auth)
 - `DATABASE_URL`
 - `STORAGE_PROVIDER=local|gcs` (+ `STORAGE_LOCAL_DIR` or `STORAGE_BUCKET`)
 - `INSIGHTS_ENABLED` (optional, default false)
 - `OPENAI_API_KEY` + `INSIGHTS_MODEL` (optional; only used when `INSIGHTS_ENABLED=true`)
 - `GOAL_TARGET_WEIGHT_KG` (optional; enables projected timeline to goal)
+
+## Enable LLM insights
+
+- Copy `.env.example` to `apps/api/.env` and set `INSIGHTS_ENABLED=true`.
+- Add your OpenAI key to `OPENAI_API_KEY` and choose a chat-completions model for `INSIGHTS_MODEL` (e.g. `gpt-4o-mini`) in `apps/api/.env`.
+- Keep the key server-side only; the web app never needs it. Trigger insights generation by running the pipeline (`POST /api/pipeline/run` with `x-internal-api-key` + `x-user-id` headers, or use `pnpm --filter @health-agent/api seed:sample` locally).
 
 ## Deploy
 

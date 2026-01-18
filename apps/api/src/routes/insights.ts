@@ -1,9 +1,17 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../prisma.js";
+import { requireUserFromInternalRequest } from "../auth.js";
+import { loadEnv } from "../env.js";
 
 export async function insightsRoutes(app: FastifyInstance) {
-  app.get("/latest", async () => {
+  const env = loadEnv();
+
+  app.get("/latest", async (req, reply) => {
+    const user = await requireUserFromInternalRequest({ req, reply, env });
+    if (!user) return;
+
     const latest = await prisma.insightsDoc.findFirst({
+      where: { userId: user.id },
       orderBy: { createdAt: "desc" }
     });
 
@@ -20,8 +28,12 @@ export async function insightsRoutes(app: FastifyInstance) {
     };
   });
 
-  app.get("/history", async () => {
+  app.get("/history", async (req, reply) => {
+    const user = await requireUserFromInternalRequest({ req, reply, env });
+    if (!user) return;
+
     const docs = await prisma.insightsDoc.findMany({
+      where: { userId: user.id },
       orderBy: { createdAt: "desc" },
       take: 50
     });
@@ -36,9 +48,12 @@ export async function insightsRoutes(app: FastifyInstance) {
     };
   });
 
-  app.get("/:id", async (req) => {
+  app.get("/:id", async (req, reply) => {
+    const user = await requireUserFromInternalRequest({ req, reply, env });
+    if (!user) return;
+
     const id = (req.params as { id: string }).id;
-    const doc = await prisma.insightsDoc.findUnique({ where: { id } });
+    const doc = await prisma.insightsDoc.findFirst({ where: { id, userId: user.id } });
 
     return {
       doc: doc
