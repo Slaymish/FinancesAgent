@@ -63,7 +63,6 @@ export const demoPipelineLatest = {
       ],
       goalProjection: {
         targetWeightKg: 78,
-        latestWeightKg: 79.4,
         deltaToGoalKg: -1.4,
         observedSlopeKgPerDay14: -0.04,
         observedSlopeKgPerWeek: -0.28,

@@ -122,10 +122,9 @@ export default async function HomePage() {
   const goalProjection = pack?.goalProjection as
     | {
         targetWeightKg: number;
-        latestWeightKg: number;
         deltaToGoalKg: number;
-        observedSlopeKgPerDay14: number;
-        observedSlopeKgPerWeek?: number;
+        observedSlopeKgPerDay14: number | null;
+        observedSlopeKgPerWeek: number | null;
         projectedDaysToGoal: number | null;
         projectedDate: string | null;
         trend: "toward" | "away" | "flat" | "at-goal";
@@ -159,8 +158,13 @@ export default async function HomePage() {
   }
 
   const projectionReachable = goalProjection?.projectedDate != null;
-  const projectionTone: DeltaTone =
-    goalProjection && (goalProjection.trend === "toward" || goalProjection.trend === "at-goal") ? "positive" : goalProjection ? "negative" : "neutral";
+  const projectionTone: DeltaTone = goalProjection
+    ? goalProjection.trend === "toward" || goalProjection.trend === "at-goal"
+      ? "positive"
+      : goalProjection.trend === "flat"
+        ? "warn"
+        : "negative"
+    : "neutral";
   const projectedDateLabel =
     goalProjection && goalProjection.projectedDate
       ? formatDateTime(goalProjection.projectedDate, { dateStyle: "medium" })
@@ -277,7 +281,9 @@ export default async function HomePage() {
       ? { label: "Goal met", tone: "positive" as const }
       : projectionReachable
         ? { label: "On pace", tone: "positive" as const }
-        : { label: goalProjection.trend === "away" ? "Off pace" : "No momentum", tone: "negative" as const }
+        : goalProjection.trend === "flat"
+          ? { label: "Stalled", tone: "neutral" as const }
+          : { label: "Off pace", tone: "negative" as const }
     : { label: "No goal set", tone: "neutral" as const };
 
   return (
@@ -335,7 +341,9 @@ export default async function HomePage() {
                     <span className="chip">
                       Projection: {projectionReachable ? `${projectedDateLabel} (${goalProjection.projectedDaysToGoal ?? "—"}d)` : "Not at this pace"}
                     </span>
-                    <span className="chip">Delta: {formatNumber(goalProjection.deltaToGoalKg, 2)} kg to {goalProjection.targetWeightKg} kg</span>
+                    <span className="chip">
+                      Delta: {formatNumber(Math.abs(goalProjection.deltaToGoalKg), 2)} kg from {goalProjection.targetWeightKg} kg
+                    </span>
                   </div>
                 ) : (
                   <p className="muted">

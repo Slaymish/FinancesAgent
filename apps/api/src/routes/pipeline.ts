@@ -179,9 +179,13 @@ function computeGoalProjection(params: {
   if (!latest || typeof latest.weightKg !== "number") return null;
 
   const today = new Date(metricsPack.ranges?.d7?.end ?? new Date().toISOString());
-  const observed = metricsPack.weight?.slopeKgPerDay14;
+  const observed =
+    typeof metricsPack.weight?.slopeKgPerDay14 === "number"
+      ? metricsPack.weight?.slopeKgPerDay14
+      : typeof metricsPack.weight?.slopeKgPerDay7 === "number"
+      ? metricsPack.weight?.slopeKgPerDay7
+      : null;
   const observedSlopeKgPerDay14 = typeof observed === "number" ? observed : null;
-  if (observedSlopeKgPerDay14 == null) return null;
 
   const deltaToGoalKg = env.GOAL_TARGET_WEIGHT_KG - latest.weightKg;
   const trend =
@@ -189,7 +193,9 @@ function computeGoalProjection(params: {
       ? "at-goal"
       : observedSlopeKgPerDay14 === 0
         ? "flat"
-        : deltaToGoalKg * observedSlopeKgPerDay14 > 0
+        : observedSlopeKgPerDay14 == null
+          ? "flat"
+          : deltaToGoalKg * observedSlopeKgPerDay14 > 0
           ? "toward"
           : "away";
 
@@ -199,7 +205,7 @@ function computeGoalProjection(params: {
   if (deltaToGoalKg === 0) {
     projectedDaysToGoal = 0;
     projectedDate = startOfDayUtc(today).toISOString();
-  } else if (trend === "toward") {
+  } else if (trend === "toward" && observedSlopeKgPerDay14 != null) {
     projectedDaysToGoal = Math.ceil(Math.abs(deltaToGoalKg / observedSlopeKgPerDay14));
     projectedDate = addDaysUtc(startOfDayUtc(today), projectedDaysToGoal).toISOString();
   }
@@ -207,7 +213,7 @@ function computeGoalProjection(params: {
   return {
     targetWeightKg: env.GOAL_TARGET_WEIGHT_KG,
     observedSlopeKgPerDay14,
-    observedSlopeKgPerWeek: observedSlopeKgPerDay14 * 7,
+    observedSlopeKgPerWeek: observedSlopeKgPerDay14 != null ? observedSlopeKgPerDay14 * 7 : null,
     deltaToGoalKg,
     projectedDaysToGoal,
     projectedDate,
