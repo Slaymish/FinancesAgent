@@ -97,6 +97,7 @@ export async function insightsRoutes(app: FastifyInstance) {
     });
 
     const previousMarkdown = prev?.markdown ?? "## Weekly synthesis\n- Awaiting next update.\n";
+    const metricsPack = latestRun.metricsPack ?? {};
 
     let nextMarkdown = previousMarkdown;
     let diffFromPrev: string | null = null;
@@ -106,7 +107,7 @@ export async function insightsRoutes(app: FastifyInstance) {
         apiKey: env.OPENAI_API_KEY,
         model: env.INSIGHTS_MODEL,
         previousMarkdown,
-        metricsPack: latestRun.metricsPack,
+        metricsPack,
         systemPrompt: user.insightsSystemPrompt
       });
 
@@ -129,7 +130,7 @@ export async function insightsRoutes(app: FastifyInstance) {
         userId: user.id,
         markdown: nextMarkdown,
         diffFromPrev,
-        metricsPack: latestRun.metricsPack,
+        metricsPack,
         pipelineRunId: latestRun.id
       }
     });
