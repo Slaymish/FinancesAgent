@@ -1,11 +1,8 @@
 import type { ReactNode } from "react";
 import "./globals.css";
 import Nav from "./components/nav";
-import SyncButton from "./components/sync-button";
 import Providers from "./providers";
-import AuthButton from "./components/auth-button";
 import UserGreeting from "./components/user-greeting";
-import ThemeToggle from "./components/theme-toggle";
 
 const themeInitScript = `
 (() => {
@@ -44,10 +41,7 @@ export default function RootLayout({
               </div>
               <Nav />
               <div className="actions">
-                <ThemeToggle />
-                <SyncButton />
                 <UserGreeting />
-                <AuthButton />
               </div>
             </header>
             <main className="page">{children}</main>
