@@ -10,12 +10,12 @@ export const dynamic = "force-dynamic";
 export default async function PreferencesPage() {
   const session = await getSessionOrNull();
 
-  const needsSignIn = !session?.user?.id;
+  const userId = session?.user?.id;
+  const needsSignIn = !userId;
 
-  const user = needsSignIn
-    ? null
-    : await prisma.user.findUnique({
-        where: { id: session.user.id },
+  const user = userId
+    ? await prisma.user.findUnique({
+        where: { id: userId },
         select: {
           targetWeightKg: true,
           targetCalories: true,
@@ -26,7 +26,8 @@ export default async function PreferencesPage() {
           targetTrainingSessions: true,
           targetFibreG: true
         }
-      });
+      })
+    : null;
 
   return (
     <div className="section">
