@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import AuthButton from "./auth-button";
+import SyncButton from "./sync-button";
 
 const links = [
   { href: "/", label: "Status" },
@@ -51,6 +53,10 @@ export default function Nav() {
             </Link>
           );
         })}
+        <div className="nav-actions">
+          <SyncButton />
+          <AuthButton />
+        </div>
       </div>
     </nav>
   );
