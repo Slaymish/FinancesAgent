@@ -44,9 +44,9 @@ export default function RootLayout({
               </div>
               <Nav />
               <div className="actions">
-                <UserGreeting />
                 <ThemeToggle />
                 <SyncButton />
+                <UserGreeting />
                 <AuthButton />
               </div>
             </header>
