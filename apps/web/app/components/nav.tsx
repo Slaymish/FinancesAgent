@@ -1,19 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { Activity, ClipboardCheck, Database, PlugZap, Settings2, TrendingUp } from "lucide-react";
+import { Activity, ClipboardCheck, Database, TrendingUp } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import AuthButton from "./auth-button";
 import SyncButton from "./sync-button";
 
 const links = [
   { href: "/", label: "Status", icon: Activity },
   { href: "/insights", label: "Review", icon: ClipboardCheck },
   { href: "/trends", label: "Trends", icon: TrendingUp },
-  { href: "/data-quality", label: "Data", icon: Database },
-  { href: "/preferences", label: "Preferences", icon: Settings2 },
-  { href: "/connect", label: "Connect", icon: PlugZap }
+  { href: "/data-quality", label: "Data", icon: Database }
 ];
 
 export default function Nav() {
@@ -58,7 +55,6 @@ export default function Nav() {
         })}
         <div className="nav-actions">
           <SyncButton />
-          <AuthButton />
         </div>
       </div>
     </nav>
