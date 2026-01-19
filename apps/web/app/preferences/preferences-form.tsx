@@ -126,7 +126,7 @@ export default function PreferencesForm({ initial }: PreferencesFormProps) {
 
   return (
     <form className="stack" onSubmit={handleSubmit}>
-      <Card title="Goal targets" subtitle="Used for projections and weekly summaries.">
+      <Card title="Goal targets" subtitle="Used for projections.">
         <div className="form-grid">
           <div className="field">
             <label htmlFor="targetWeightKg">Target weight (kg)</label>
@@ -136,15 +136,16 @@ export default function PreferencesForm({ initial }: PreferencesFormProps) {
               type="number"
               step="0.1"
               placeholder="e.g. 75"
+              className="input"
               value={form.targetWeightKg}
               onChange={(event) => setField("targetWeightKg", event.target.value)}
             />
-            <p className="field-hint">Used for the arrival date and pace projection.</p>
+            <p className="field-hint">Used for pace + arrival date.</p>
           </div>
         </div>
       </Card>
 
-      <Card title="MacroFactor targets" subtitle="Optional macros if you track within MacroFactor.">
+      <Card title="MacroFactor targets" subtitle="Optional macros.">
         <div className="form-grid">
           <div className="field">
             <label htmlFor="targetCalories">Target calories (kcal)</label>
@@ -154,10 +155,11 @@ export default function PreferencesForm({ initial }: PreferencesFormProps) {
               type="number"
               step="1"
               placeholder="e.g. 2200"
+              className="input"
               value={form.targetCalories}
               onChange={(event) => setField("targetCalories", event.target.value)}
             />
-            <p className="field-hint">Optional daily calorie goal from MacroFactor.</p>
+            <p className="field-hint">Optional daily calorie goal.</p>
           </div>
 
           <div className="field">
@@ -168,10 +170,11 @@ export default function PreferencesForm({ initial }: PreferencesFormProps) {
               type="number"
               step="1"
               placeholder="e.g. 160"
+              className="input"
               value={form.targetProteinG}
               onChange={(event) => setField("targetProteinG", event.target.value)}
             />
-            <p className="field-hint">Leave blank if you do not track macros.</p>
+            <p className="field-hint">Leave blank if not tracking macros.</p>
           </div>
 
           <div className="field">
@@ -182,6 +185,7 @@ export default function PreferencesForm({ initial }: PreferencesFormProps) {
               type="number"
               step="1"
               placeholder="e.g. 70"
+              className="input"
               value={form.targetFatG}
               onChange={(event) => setField("targetFatG", event.target.value)}
             />
@@ -195,6 +199,7 @@ export default function PreferencesForm({ initial }: PreferencesFormProps) {
               type="number"
               step="1"
               placeholder="e.g. 220"
+              className="input"
               value={form.targetCarbsG}
               onChange={(event) => setField("targetCarbsG", event.target.value)}
             />
@@ -208,6 +213,7 @@ export default function PreferencesForm({ initial }: PreferencesFormProps) {
               type="number"
               step="1"
               placeholder="e.g. 30"
+              className="input"
               value={form.targetFibreG}
               onChange={(event) => setField("targetFibreG", event.target.value)}
             />
@@ -215,7 +221,7 @@ export default function PreferencesForm({ initial }: PreferencesFormProps) {
         </div>
       </Card>
 
-      <Card title="Recovery + training" subtitle="Helpful baselines for sleep and training cadence.">
+      <Card title="Recovery + training" subtitle="Baselines for sleep + cadence.">
         <div className="form-grid">
           <div className="field">
             <label htmlFor="targetSleepHours">Sleep target (hours)</label>
@@ -225,10 +231,11 @@ export default function PreferencesForm({ initial }: PreferencesFormProps) {
               type="number"
               step="0.1"
               placeholder="e.g. 7.5"
+              className="input"
               value={form.targetSleepHours}
               onChange={(event) => setField("targetSleepHours", event.target.value)}
             />
-            <p className="field-hint">Optional goal to compare against sleep averages.</p>
+            <p className="field-hint">Optional sleep baseline.</p>
           </div>
 
           <div className="field">
@@ -239,10 +246,11 @@ export default function PreferencesForm({ initial }: PreferencesFormProps) {
               type="number"
               step="1"
               placeholder="e.g. 4"
+              className="input"
               value={form.targetTrainingSessions}
               onChange={(event) => setField("targetTrainingSessions", event.target.value)}
             />
-            <p className="field-hint">Helps spot gaps in workout cadence.</p>
+            <p className="field-hint">Helps spot cadence gaps.</p>
           </div>
         </div>
       </Card>

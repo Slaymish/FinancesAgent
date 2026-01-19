@@ -45,7 +45,7 @@ export default function TokenManager({
       </div>
       {token ? (
         <div className="stack">
-          <p className="muted">Copy this value into the <code>X-INGEST-TOKEN</code> header in your exporter.</p>
+          <p className="muted">Copy into the <code>X-INGEST-TOKEN</code> header in your exporter.</p>
           <pre className="code-block">{token}</pre>
           <div className="muted">
             Example:
@@ -58,7 +58,7 @@ export default function TokenManager({
           </div>
         </div>
       ) : (
-        <p className="muted">Generate a token to connect your exporter. Regenerating will revoke old tokens.</p>
+        <p className="muted">Generate a token to connect your exporter. Regenerating revokes old tokens.</p>
       )}
       {status === "error" && error ? <p className="muted warn">{error}</p> : null}
     </div>

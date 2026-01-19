@@ -67,12 +67,12 @@ export default async function DataQualityPage() {
     <div className="section">
       <PageHeader
         title="Data quality"
-        description={isDemo ? "Demo view: sign in to see your own data checks." : "Freshness of ingests, pipeline coverage, and where gaps exist."}
+        description={isDemo ? "Demo view: sign in for your data checks." : "Freshness, coverage, and gaps."}
         meta={[{ label: "Range", value: `${data.range.start.slice(0, 10)} → ${data.range.end.slice(0, 10)}` }]}
       />
 
       <Grid columns={2}>
-        <Card title="Ingest freshness" subtitle="When the latest ingest arrived and finished processing.">
+        <Card title="Ingest freshness" subtitle="Latest ingest timing.">
           {data.lastIngest ? (
             <div className="stack">
               <Stat label="Ingest id" value={data.lastIngest.id} hint={`Source: ${data.lastIngest.source}`} />
@@ -84,7 +84,7 @@ export default async function DataQualityPage() {
           )}
         </Card>
 
-        <Card title="Pipeline coverage" subtitle="Latest run and how many ingests it processed.">
+        <Card title="Pipeline coverage" subtitle="Latest run and ingests processed.">
           {data.lastPipelineRun ? (
             <div className="stack">
               <Stat label="Run id" value={data.lastPipelineRun.id} />
@@ -97,7 +97,7 @@ export default async function DataQualityPage() {
         </Card>
       </Grid>
 
-      <Card title="Missing days" subtitle="Gaps over the last 14 days by category.">
+      <Card title="Missing days" subtitle="Gaps in the last 14 days.">
         <div className="grid cols-2">
           {renderMissing("Weight", data.missingDays.weight)}
           {renderMissing("Nutrition", data.missingDays.nutrition)}

@@ -63,7 +63,7 @@ function TrendCard({
       <div className="stack">
         <div className="glance-block">
           <div className="glance-block__header">
-            <h4 className="glance-title">{value}</h4>
+            <div className="glance-value">{value}</div>
             {delta ? <span className={`delta ${delta.tone === "neutral" ? "" : delta.tone}`.trim()}>{delta.text}</span> : null}
           </div>
           {hint ? <p className="muted">{hint}</p> : null}
@@ -174,7 +174,7 @@ export default async function TrendsPage() {
     <div className="section">
       <PageHeader
         title="Trends"
-        description={isDemo ? "Demo view: sign in to see your own time series." : "Key trends with quick deltas and supporting detail."}
+        description={isDemo ? "Demo view: sign in for your time series." : "Key trends with quick deltas."}
         meta={
           data.latestRun
             ? [{ label: "Last run", value: formatDateTime(data.latestRun.createdAt) }]
@@ -188,7 +188,7 @@ export default async function TrendsPage() {
         </Card>
       ) : (
         <>
-          <Card title="Headline momentum" subtitle="Week-over-week deltas for the headline metrics.">
+          <Card title="Headline momentum" subtitle="Week-over-week deltas.">
             <div className="summary-strip">
               {summaryChips.map((chip) => (
                 <span key={chip.label} className="summary-chip">
@@ -204,10 +204,10 @@ export default async function TrendsPage() {
           <div className="grid cols-2">
             <TrendCard
               title="Weight"
-              subtitle="Trend is more important than any single weigh-in."
+              subtitle="Trend beats single weigh-ins."
               value={weightSlope14 != null ? `${formatNumber(weightSlope14, 3)} kg/day (14d)` : "No recent readings"}
               delta={formatDelta(weightSlope7, weightSlope14, "kg/day", { precision: 3, goodDirection: "down" })}
-              hint="Weekly slope vs prior week."
+              hint="Weekly slope vs last week."
             >
               <Sparkline values={weightSeries.map((point) => point.weightKg).filter((value) => value != null)} />
               <details className="raw-toggle">
@@ -224,7 +224,7 @@ export default async function TrendsPage() {
 
             <TrendCard
               title="Nutrition"
-              subtitle="Keep the averages steady; avoid daily whiplash."
+              subtitle="Keep weekly averages steady."
               value={calories7 != null ? `${formatNumber(calories7, 0)} kcal (7d)` : "No recent logs"}
               delta={formatDelta(calories7, calories14, "kcal", { precision: 0, goodDirection: "down" })}
               hint={protein7 != null ? `Protein ${formatNumber(protein7, 0)}g (7d).` : undefined}
@@ -252,7 +252,7 @@ export default async function TrendsPage() {
               subtitle="Consistency beats peaks."
               value={sleepAvg7 != null ? `${formatMinutes(sleepAvg7)} (7d)` : "No sleep captured"}
               delta={formatDelta(sleepAvg7, sleepAvg14, "min", { precision: 0, goodDirection: "up" })}
-              hint="Keep nightly variance tight to steady appetite and recovery."
+              hint="Keep nightly variance tight."
             >
               <Sparkline values={sleepSeries.map((point) => point.minutes).filter((value) => value != null)} />
               <details className="raw-toggle">
@@ -269,7 +269,7 @@ export default async function TrendsPage() {
 
             <TrendCard
               title="Training"
-              subtitle="Cadence and total minutes keep momentum."
+              subtitle="Cadence and minutes."
               value={trainingSessions7 != null ? `${formatNumber(trainingSessions7, 0)} sessions (7d)` : "No training logged"}
               delta={formatDelta(trainingSessions7, trainingSessions14, "sessions", { precision: 0, goodDirection: "up" })}
               hint={pack?.training?.minutes7 ? `${formatMinutes(pack.training.minutes7)} total minutes.` : undefined}
@@ -288,13 +288,13 @@ export default async function TrendsPage() {
             </TrendCard>
           </div>
 
-          <Card title="Debug details" subtitle="Raw metrics pack for deeper tracing.">
+          <Card title="Debug details" subtitle="Raw metrics pack.">
             <details className="raw-toggle">
-              <summary>View raw metrics pack</summary>
+              <summary>View raw pack</summary>
               <pre className="code-block">{JSON.stringify(pack, null, 2)}</pre>
             </details>
             <Link className="chip" href="/metrics">
-              Open in Metrics →
+              Open Metrics →
             </Link>
           </Card>
         </>

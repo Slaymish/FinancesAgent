@@ -30,11 +30,12 @@ export async function generateInsightsUnifiedDiff(params: {
     "Update the insights document using the provided metrics pack.\n" +
     "Rules:\n" +
     "- Grounded: only claim what the numbers support; if missing, say 'Data missing' briefly.\n" +
-    "- Be concise and actionable: 6–12 bullets total.\n" +
+    "- Be concise and actionable: 4–8 bullets total (match the demo: no prose).\n" +
     "- Single heading only: start with exactly '## Weekly synthesis'. Do NOT use other headings (no '#', no '## Weight', etc.).\n" +
+    "- Output must be ONLY the heading line and bullet lines. No paragraphs. Every non-heading line MUST start with '- '.\n" +
     "- Do NOT add empty lines or empty bullets. Every bullet must contain meaningful text.\n" +
-    "- Include 1–3 'Next actions' bullets (specific, doable this week).\n" +
-    "- Include a 'Numbers used' block at the end as bullets, listing the exact numbers you referenced.\n" +
+    "- Include 1–2 'Next actions' bullets (specific, doable this week).\n" +
+    "- Include EXACTLY ONE final bullet starting with '**Numbers used:**' listing the exact numbers you referenced (semicolon-separated).\n" +
     "- Keep the markdown stable: prefer updating existing bullet text over adding lots of new bullets.\n\n" +
     "Target markdown shape (example):\n" +
     "## Weekly synthesis\n" +

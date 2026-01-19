@@ -33,14 +33,14 @@ export default async function PreferencesPage() {
     <div className="section">
       <PageHeader
         title="Preferences"
-        description="Set targets for projections, MacroFactor goals, and recovery baselines."
+        description="Set targets for projections and baselines."
       />
-      <Card title="Appearance" subtitle="Choose the theme that feels best for you." action={<ThemeToggle />}>
-        <p className="muted">Toggle between light and dark modes for the dashboard.</p>
+      <Card title="Appearance" subtitle="Choose your theme." action={<ThemeToggle />}>
+        <p className="muted">Toggle light or dark mode.</p>
       </Card>
       {needsSignIn ? (
         <Card title="Sign in to edit preferences">
-          <p className="muted">Create a GitHub session to set your target weight, calories, and macros.</p>
+          <p className="muted">Sign in to set targets and macros.</p>
           <Link className="button" href="/api/auth/signin">
             Sign in with GitHub
           </Link>

@@ -10,6 +10,8 @@
     "smoke": "tsx src/smoke.ts",
     "parse:test": "tsx src/parsers/healthAutoExport.test.ts",
     "seed:sample": "tsx src/tools/ingestSampleAndRun.ts",
+    "insights:sanitize": "tsx src/tools/sanitizeInsightsDocs.ts",
+    "users:list": "tsx src/tools/listUsers.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",

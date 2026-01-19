@@ -41,7 +41,7 @@ function GlanceSignal({
       {hint ? <p className="muted">{hint}</p> : null}
       {link ? (
         <Link className="chip" href={link}>
-          View detail →
+          Detail →
         </Link>
       ) : null}
     </div>
@@ -237,7 +237,7 @@ export default async function HomePage() {
 
   const leverCards = levers.slice(0, 3).map((lever) => ({
     text: lever,
-    why: "Highest impact lever identified from the latest run.",
+    why: "Highest impact lever.",
     confidence: "Confidence: medium"
   }));
 
@@ -267,8 +267,8 @@ export default async function HomePage() {
         title="Status"
         description={
           isDemo
-            ? "Demo view: quick read on direction, key levers, and where to focus this week."
-            : "Quick synthesis of whether the plan is working, what shifted, and the one or two levers to pull next."
+            ? "Demo view: direction, key levers, and this week's focus."
+            : "Direction, shifts, and the next lever to pull."
         }
         meta={
           data.latestRun
@@ -292,7 +292,7 @@ export default async function HomePage() {
         <>
           <Card
             title="Energy balance signal"
-            subtitle="The fastest read on whether you're in a deficit or surplus."
+            subtitle="Fast read on deficit vs surplus."
             action={<Badge tone={energyBalanceStatus.tone}>{energyBalanceStatus.label}</Badge>}
           >
             <Grid columns={2}>
@@ -310,7 +310,7 @@ export default async function HomePage() {
           </Card>
 
           {confidenceNotes.length ? (
-            <Card title="Confidence" subtitle="Where signals may be soft.">
+            <Card title="Signal confidence" subtitle="Where signals may be soft.">
               <div className="stack">
                 {confidenceNotes.map((note) => (
                   <div key={note} className="callout warn">
@@ -324,7 +324,7 @@ export default async function HomePage() {
           <Grid columns={2}>
             <Card
               title="Status"
-              subtitle="Goal progress and the projected timeline."
+              subtitle="Goal pace + projection."
               action={<Badge tone={goalBadge.tone}>{goalBadge.label}</Badge>}
             >
               <div className="stack">
@@ -349,7 +349,7 @@ export default async function HomePage() {
 
             <Card
               title="System health"
-              subtitle="Quick check that ingestion and processing are flowing."
+              subtitle="Ingestion + processing flow."
               action={<Badge tone="neutral">Run {data.latestRun.id}</Badge>}
             >
               <div className="stack">
@@ -364,7 +364,7 @@ export default async function HomePage() {
             </Card>
           </Grid>
 
-          <Card title="Secondary signals" subtitle="Sleep and training context to support the core trend.">
+          <Card title="Secondary signals" subtitle="Sleep + training context.">
             <div className="glance-grid">
               {headlineSignals.map((signal) => (
                 <GlanceSignal key={signal.title} title={signal.title} value={signal.value} hint={signal.hint} delta={signal.delta} link={signal.link} />
@@ -372,7 +372,7 @@ export default async function HomePage() {
             </div>
           </Card>
 
-          <Card title="What changed since last week" subtitle="Changes from last week with links to evidence.">
+          <Card title="Since last week" subtitle="Changes and evidence links.">
             <ul className="change-list">
               {changeSummary.map((item) => (
                 <ChangeItem key={item.title} title={item.title} detail={item.detail} tone={item.tone} link={item.link} />
@@ -380,7 +380,7 @@ export default async function HomePage() {
             </ul>
           </Card>
 
-          <Card title="Key levers" subtitle="Actions that matter most right now.">
+          <Card title="Key levers" subtitle="Highest impact actions.">
             {leverCards.length ? (
               <div className="lever-grid">
                 {leverCards.map((lever) => (
@@ -392,7 +392,7 @@ export default async function HomePage() {
             )}
           </Card>
 
-          <Card title="Diagnostics" subtitle="Evidence and debugging paths.">
+          <Card title="Tools" subtitle="Evidence and raw data.">
             <div className="list-inline">
               <Link className="button" href="/trends">
                 Trends

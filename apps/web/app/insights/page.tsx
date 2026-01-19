@@ -90,7 +90,7 @@ export default async function InsightsPage() {
     <div className="section">
       <PageHeader
         title="Review"
-        description={isDemo ? "Demo view: sign in to see your own weekly synthesis." : "Weekly summary of what changed and where to adjust."}
+        description={isDemo ? "Demo view: sign in for your weekly synthesis." : "Weekly changes and what to adjust."}
         meta={
           latest.latest
             ? [{ label: "Last updated", value: formatDateTime(latest.latest.createdAt) }]
@@ -99,19 +99,19 @@ export default async function InsightsPage() {
       />
 
       {!latest.latest ? (
-        <Card title="No insights yet" subtitle="Run the pipeline to generate a first synthesis.">
-          <div className="stack">
-            <p className="muted">Once the pipeline runs, you will see synthesized notes and comparisons here.</p>
-            <Link className="button" href="/">
-              Go to Status
-            </Link>
-          </div>
-        </Card>
-      ) : (
+          <Card title="No insights yet" subtitle="Run the pipeline to generate a synthesis.">
+            <div className="stack">
+              <p className="muted">After a run, you will see the weekly summary here.</p>
+              <Link className="button" href="/">
+                Go to Status
+              </Link>
+            </div>
+          </Card>
+        ) : (
         <>
           <Card
             title="Weekly synthesis"
-            subtitle="Overview with the notes and supporting numbers in one place."
+            subtitle="Summary with supporting signals."
             action={<Badge tone="neutral">Doc {latest.latest.id}</Badge>}
           >
             <div className="stack">
@@ -121,14 +121,14 @@ export default async function InsightsPage() {
               </div>
               <InsightMarkdown markdown={latest.latest.markdown} />
               <Link className="chip" href="/trends">
-                See supporting charts →
+                Supporting charts →
               </Link>
             </div>
           </Card>
         </>
       )}
 
-      <Card title="History" subtitle="Chronological list of documents and their sources.">
+      <Card title="History" subtitle="Recent documents and sources.">
         {history.docs.length === 0 ? (
           <p className="muted">No history to show yet.</p>
         ) : (

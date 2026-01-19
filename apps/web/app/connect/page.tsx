@@ -14,9 +14,9 @@ export default async function ConnectPage() {
   if (!session?.user?.id) {
     return (
       <div className="section">
-        <PageHeader title="Connect Apple Health" description="Sign in to generate a personal ingest token and link your exports." />
+        <PageHeader title="Connect Apple Health" description="Sign in to generate an ingest token." />
         <Card title="Sign in to connect">
-          <p className="muted">Create a GitHub session to generate your ingest token and get connection steps.</p>
+          <p className="muted">Create a GitHub session to generate your ingest token.</p>
           <Link className="button" href="/api/auth/signin">
             Sign in with GitHub
           </Link>
@@ -34,23 +34,23 @@ export default async function ConnectPage() {
     <div className="section">
       <PageHeader
         title="Connect Apple Health"
-        description="Generate your ingest token and point your exporter at the personal endpoint."
+        description="Generate a token and point your exporter at the endpoint."
         meta={[{ label: "Endpoint", value: ingestUrl }]}
       />
 
       <Grid columns={2}>
-        <Card title="Your ingest token" subtitle="Generate a token to use in your Apple Health export automation.">
+        <Card title="Your ingest token" subtitle="Generate a token for exports.">
           <TokenManager initialPreview={user?.ingestTokenPreview ?? null} ingestUrl={ingestUrl} />
         </Card>
 
-        <Card title="Setup steps" subtitle="Point your exporter at the ingest endpoint with your token.">
+        <Card title="Setup steps" subtitle="Point your exporter at the ingest endpoint.">
           <ol className="list">
             <li>Open your exporter (e.g., Health Auto Export) and add a REST target.</li>
             <li>Set the URL to <code>{ingestUrl}</code>.</li>
             <li>Set header <code>X-INGEST-TOKEN</code> to the token above.</li>
             <li>Send daily exports (JSON) to keep the pipeline fresh.</li>
           </ol>
-          <p className="muted">Tip: run a manual export once to confirm you see a recent ingest in the Data view.</p>
+          <p className="muted">Tip: run a manual export to confirm a recent ingest appears in Data.</p>
         </Card>
       </Grid>
     </div>

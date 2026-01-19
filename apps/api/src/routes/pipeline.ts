@@ -5,6 +5,7 @@ import { readStorageJson } from "../storage/storage.js";
 import { parseAppleHealthExport } from "../parsers/appleHealthStub.js";
 import { generateInsightsUnifiedDiff } from "../insights/llm.js";
 import { applyUnifiedDiff } from "../insights/patch.js";
+import { sanitizeInsightsMarkdown } from "../insights/sanitize.js";
 import { requireUserFromInternalRequest } from "../auth.js";
 
 function startOfDayUtc(date: Date): Date {
@@ -432,10 +433,11 @@ export async function pipelineRoutes(app: FastifyInstance) {
       const prev = await prisma.insightsDoc.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "desc" } });
 
       if (!prev) {
+        const sanitized = sanitizeInsightsMarkdown("## Weekly synthesis\n- Awaiting next update.\n");
         await prisma.insightsDoc.create({
           data: {
             userId: user.id,
-            markdown: "## Weekly synthesis\n- Awaiting next update.\n",
+            markdown: sanitized.markdown,
             diffFromPrev: null,
             metricsPack: metricsPackWithGoal,
             pipelineRunId: run.id
@@ -462,6 +464,13 @@ export async function pipelineRoutes(app: FastifyInstance) {
         } else {
           warnings.push("Insights enabled but missing OPENAI_API_KEY or INSIGHTS_MODEL.");
         }
+
+        const sanitized = sanitizeInsightsMarkdown(nextMarkdown);
+        if (sanitized.changed) {
+          warnings.push("Insights markdown normalized to bullet-only format.");
+          diffFromPrev = null;
+        }
+        nextMarkdown = sanitized.markdown;
 
         await prisma.insightsDoc.create({
           data: {

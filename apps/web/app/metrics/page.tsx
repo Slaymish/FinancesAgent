@@ -45,14 +45,14 @@ export default async function MetricsPage() {
         title="Latest metrics"
         description={
           isDemo
-            ? "Demo view: sign in to inspect your own metrics payload."
-            : "Everything emitted by the most recent run for debugging and exploration."
+            ? "Demo view: sign in to inspect your metrics payload."
+            : "Payload from the most recent run."
         }
       />
 
       {data.latestRun ? (
         <>
-          <Card title="Run details" subtitle="Quick context before diving into the payload.">
+          <Card title="Run details" subtitle="Quick context.">
             <div className="grid cols-2">
               <Stat label="Run id" value={data.latestRun.id} />
               <Stat label="Created" value={formatDateTime(data.latestRun.createdAt)} />
@@ -60,7 +60,7 @@ export default async function MetricsPage() {
             </div>
           </Card>
 
-          <Card title="Metrics pack" subtitle="Full payload is tucked into a readable block.">
+          <Card title="Metrics pack" subtitle="Full payload.">
             <details className="code-details">
               <summary className="code-summary">View raw JSON</summary>
               <pre className="code-block">{JSON.stringify(data.latestRun.metricsPack, null, 2)}</pre>
