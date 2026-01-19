@@ -146,6 +146,20 @@ export default async function HomePage() {
   const trainingSessions14 = pack?.training?.sessions14;
   const trainingMinutes7 = pack?.training?.minutes7;
 
+  const energyBalanceStatus =
+    weightSlope14 == null
+      ? { label: "Insufficient data", tone: "neutral" as const }
+      : weightSlope14 < -0.0005
+        ? { label: "Likely in deficit", tone: "positive" as const }
+        : weightSlope14 > 0.0005
+          ? { label: "Likely in surplus", tone: "negative" as const }
+          : { label: "Near maintenance", tone: "neutral" as const };
+
+  const energyBalanceHint =
+    calories7 != null && calories14 != null
+      ? `Calories: ${formatNumber(calories7, 0)} avg (7d) vs ${formatNumber(calories14, 0)} avg (14d).`
+      : "Calories missing; trend relies on weight data only.";
+
   const confidenceNotes: string[] = [];
   if (sleep7 == null || sleep14 == null) {
     confidenceNotes.push("Sleep data missing; recovery trends may be unreliable.");
@@ -179,26 +193,6 @@ export default async function HomePage() {
 
   const headlineSignals = [
     {
-      title: "Weight trend",
-      value: weightSlope14 != null ? `${formatNumber(weightSlope14, 3)} kg/day (14d)` : "No recent readings",
-      delta: formatDelta(weightSlope7, weightSlope14, "kg/day", {
-        precision: 3,
-        goodDirection: "down"
-      }),
-      hint: projectionHint,
-      link: "/trends"
-    },
-    {
-      title: "Calorie adherence",
-      value: calories7 != null ? `${formatNumber(calories7, 0)} avg kcal (7d)` : "No recent logs",
-      delta: formatDelta(calories7, calories14, "kcal", {
-        precision: 0,
-        goodDirection: "down"
-      }),
-      hint: protein7 != null ? `Protein ${formatNumber(protein7, 0)}g (7d).` : undefined,
-      link: "/trends"
-    },
-    {
       title: "Sleep consistency",
       value: sleep7 != null ? `${formatMinutes(sleep7)} avg (7d)` : "No sleep captured",
       delta: formatDelta(sleep7, sleep14, "min", {
@@ -222,40 +216,21 @@ export default async function HomePage() {
 
   const changeSummary: Array<{ title: string; detail: string; tone: DeltaTone; link?: string }> = [
     {
-      title: "Direction of change",
-      detail:
-        weightSlope14 != null
-          ? goalProjection
-            ? goalProjection.trend === "at-goal"
-              ? `Goal met; 14d slope ${formatNumber(weightSlope14, 3)} kg/day.`
-              : projectionReachable
-                ? `14d slope ${formatNumber(weightSlope14, 3)} kg/day → ${goalProjection.targetWeightKg} kg by ${projectedDateLabel}.`
-                : `14d slope ${formatNumber(weightSlope14, 3)} kg/day is ${
-                    goalProjection.trend === "away" ? "moving away from" : "flat toward"
-                  } ${goalProjection.targetWeightKg} kg.`
-            : `14d weight slope ${formatNumber(weightSlope14, 3)} kg/day; set a goal weight for a projection.`
-          : "No weight slope available.",
-      tone: goalProjection ? projectionTone : "neutral",
-      link: "/trends"
-    },
-    {
-      title: "Nutrition shift",
-      detail:
-        calories7 != null && calories14 != null
-          ? `Calories ${formatNumber(calories7, 0)} vs ${formatNumber(calories14, 0)} last week; protein ${
-              protein7 != null ? `${formatNumber(protein7, 0)}g` : "—"
-            }`
-          : "No recent calorie/protein data.",
-      tone: "warn",
-      link: "/trends"
-    },
-    {
       title: "Recovery + sleep",
       detail:
         sleep7 != null && sleep14 != null
           ? `Sleep ${formatMinutes(sleep7)} vs ${formatMinutes(sleep14)} last week.`
           : "Sleep data missing; adjust expectations.",
       tone: sleep7 != null && sleep14 != null && sleep7 < sleep14 ? "warn" : "neutral",
+      link: "/trends"
+    },
+    {
+      title: "Training volume",
+      detail:
+        trainingMinutes7 != null && trainingSessions7 != null
+          ? `${formatMinutes(trainingMinutes7)} across ${formatNumber(trainingSessions7, 0)} sessions (7d).`
+          : "Training data missing this week.",
+      tone: trainingSessions7 != null && trainingSessions7 === 0 ? "warn" : "neutral",
       link: "/trends"
     }
   ];
@@ -315,6 +290,25 @@ export default async function HomePage() {
         </Card>
       ) : (
         <>
+          <Card
+            title="Energy balance signal"
+            subtitle="The fastest read on whether you're in a deficit or surplus."
+            action={<Badge tone={energyBalanceStatus.tone}>{energyBalanceStatus.label}</Badge>}
+          >
+            <Grid columns={2}>
+              <Stat
+                label="Weight trend (14d)"
+                value={weightSlope14 != null ? `${formatNumber(weightSlope14, 3)} kg/day` : "No recent readings"}
+                hint={projectionHint}
+              />
+              <Stat
+                label="Calories (7d)"
+                value={calories7 != null ? `${formatNumber(calories7, 0)} avg kcal` : "No recent logs"}
+                hint={energyBalanceHint}
+              />
+            </Grid>
+          </Card>
+
           {confidenceNotes.length ? (
             <Card title="Confidence" subtitle="Where signals may be soft.">
               <div className="stack">
@@ -370,7 +364,7 @@ export default async function HomePage() {
             </Card>
           </Grid>
 
-          <Card title="Headline signals" subtitle="Glanceable read on trend and goal projection; details live in Trends.">
+          <Card title="Secondary signals" subtitle="Sleep and training context to support the core trend.">
             <div className="glance-grid">
               {headlineSignals.map((signal) => (
                 <GlanceSignal key={signal.title} title={signal.title} value={signal.value} hint={signal.hint} delta={signal.delta} link={signal.link} />

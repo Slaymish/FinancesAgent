@@ -26,8 +26,6 @@ type InsightsHistoryResponse = {
   }>;
 };
 
-type DiffItem = { text: string; tone: "positive" | "attention" | "warn" | "neutral" };
-
 export const dynamic = "force-dynamic";
 
 function InsightMarkdown({ markdown }: { markdown: string }) {
@@ -55,34 +53,6 @@ function InsightMarkdown({ markdown }: { markdown: string }) {
       ) : null}
     </div>
   );
-}
-
-function parseDiff(diff: string | null | undefined): DiffItem[] {
-  if (!diff) return [];
-  return diff
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((line) => {
-      if (line.startsWith("+++")) return false;
-      if (line.startsWith("---")) return false;
-      if (line.startsWith("@@")) return false;
-      return line.startsWith("+") || line.startsWith("-");
-    })
-    .map((line) => {
-      const tone: DiffItem["tone"] = line.startsWith("-") ? "attention" : line.startsWith("+") ? "positive" : "neutral";
-      const text = line.replace(/^[-+]\s*/, "").trim();
-      return { text, tone };
-    })
-    .filter((item) => item.text.length > 0)
-    .filter((item) => !item.text.startsWith("#"));
-}
-
-function toneClassName(tone: DiffItem["tone"]) {
-  if (tone === "positive") return "good";
-  if (tone === "attention") return "attention";
-  if (tone === "warn") return "warn";
-  return "";
 }
 
 export default async function InsightsPage() {
@@ -115,8 +85,6 @@ export default async function InsightsPage() {
     latest = latestRes.data;
     history = historyRes.data;
   }
-
-  const diffItems = parseDiff(latest.latest?.diffFromPrev);
 
   return (
     <div className="section">
@@ -155,34 +123,6 @@ export default async function InsightsPage() {
               <Link className="chip" href="/trends">
                 See supporting charts →
               </Link>
-            </div>
-          </Card>
-
-          <Card title="What changed vs last week" subtitle="Brief diffs with links to evidence.">
-            <div className="stack">
-              {diffItems.length ? (
-                <ul className="change-list">
-                  {diffItems.map((item) => (
-                    <li key={item.text} className="change-item">
-                      <div className="change-meta">
-                        <span className={`chip ${toneClassName(item.tone)}`.trim()}>{item.tone === "positive" ? "Improved" : item.tone === "attention" ? "Regressed" : "Changed"}</span>
-                        <Link className="chip" href="/trends">
-                          Evidence
-                        </Link>
-                      </div>
-                      <div className="stat-value">{item.text}</div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="muted">No diff provided.</p>
-              )}
-              {latest.latest.diffFromPrev ? (
-                <details className="raw-toggle">
-                  <summary>View raw diff</summary>
-                  <pre className="code-block">{latest.latest.diffFromPrev}</pre>
-                </details>
-              ) : null}
             </div>
           </Card>
         </>
