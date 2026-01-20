@@ -30,10 +30,13 @@ export default function CategoriesForm({
 
   const hasChanges = useMemo(() => JSON.stringify(rules) !== JSON.stringify(initialRules), [rules, initialRules]);
 
-  function updateRule(index: number, key: keyof CategoryRule, value: string | number | boolean) {
+  function updateRule<K extends keyof CategoryRule>(index: number, key: K, value: CategoryRule[K]) {
     setRules((prev) => {
       const next = [...prev];
       const existing = next[index];
+      if (!existing) {
+        return prev;
+      }
       next[index] = { ...existing, [key]: value };
       return next;
     });
