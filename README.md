@@ -1,29 +1,22 @@
-# HealthAgent
+# FinanceAgent
 
-HealthAgent turns daily Apple Health exports into a clean, opinionated health summary.
+FinanceAgent turns daily Akahu bank transactions into a clean, opinionated finance dashboard.
 
 - API: Fastify + Prisma (Postgres)
 - Web: Next.js App Router
-- Raw storage: local disk (dev) or GCS (cloud)
-- Auth: NextAuth (GitHub) with per-user ingest tokens and user-scoped data
-
-Quick walkthrough: [ONBOARDING.md](docs/ONBOARDING.md).
+- Auth: NextAuth (GitHub) with demo data when signed out
+- Scheduler: Cloud Scheduler hitting `/api/pipeline/run`
 
 ## What it does
 
-- Daily ingest → canonical tables → metrics pack
-- Optional weekly insights doc (diff-based)
-- UI focused on trend + next actions
-
-## Screenshot
-
-![HealthAgent](docs/status_screenshot.png)
+- Daily sync → transactions + categories → metrics pack
+- Category rules managed in the UI (pattern + field + amount conditions)
+- Trends for spend, savings, wants/essentials, and cashflow
 
 ## Repo layout
 
 - `apps/api` — Fastify API + Prisma
 - `apps/web` — Next.js frontend
-- `storage/local` — local raw ingest storage (dev)
 
 ## Run locally
 
@@ -43,64 +36,26 @@ pnpm dev
 - API: http://localhost:3001/health
 - Web: http://localhost:3000
 
-Notes:
-- API loads dotenv from `apps/api/.env`.
-- Set `INTERNAL_API_KEY` in both `.env` files.
-
-## Try it quickly (sample data)
-
-This repo includes a small Health Auto Export sample. It will write the sample into local storage and run the full pipeline:
-
-```bash
-pnpm --filter @health-agent/api seed:sample
-```
-
-Then open:
-
-- Dashboard: http://localhost:3000
-- Insights: http://localhost:3000/insights
-
 ## Key endpoints
 
-- `POST /api/ingest/apple-health` (auth: per-user `X-INGEST-TOKEN` or `Authorization: Bearer <token>`)
 - `POST /api/pipeline/run` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`, or `X-PIPELINE-TOKEN` + `X-USER-ID`)
 - `GET /api/pipeline/latest` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
-- `GET /api/insights/latest` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
-- `GET /api/data-quality/summary` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
+- `GET /api/categories` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
+- `POST /api/categories` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
+- `GET /api/transactions/summary` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
 
 ## Config (API)
 
 See `.env.example` for the full list. Common ones:
 
-- `INGEST_TOKEN`
+- `AKAHU_APP_TOKEN`
+- `AKAHU_USER_TOKEN`
 - `INTERNAL_API_KEY`
+- `PIPELINE_TOKEN`
 - `API_BASE_URL` (for the web app to call the API)
 - `NEXTAUTH_SECRET` + `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` (web auth)
 - `DATABASE_URL`
-- `STORAGE_PROVIDER=local|gcs` (+ `STORAGE_LOCAL_DIR` or `STORAGE_BUCKET`)
-- `INSIGHTS_ENABLED` (optional, default false)
-- `OPENAI_API_KEY` + `INSIGHTS_MODEL` (optional; only used when `INSIGHTS_ENABLED=true`)
-- Target weight is set in the Preferences tab (used for projected timeline)
-
-## Enable LLM insights
-
-- Copy `.env.example` to `apps/api/.env` and set `INSIGHTS_ENABLED=true`.
-- Add your OpenAI key to `OPENAI_API_KEY` and choose a chat-completions model for `INSIGHTS_MODEL` (e.g. `gpt-4o-mini`) in `apps/api/.env`.
-- Keep the key server-side only; the web app never needs it. Trigger insights generation by running the pipeline (`POST /api/pipeline/run` with `x-internal-api-key` + `x-user-id` headers, or use `pnpm --filter @health-agent/api seed:sample` locally).
 
 ## Deploy
 
-GCP deployment (Cloud Run + GCS + Cloud Scheduler + external/serverless Postgres like Neon) is documented in [DEPLOY_GCP.md](docs/DEPLOY_GCP.md).
-
-## Cost notes (<$10/month)
-
-- Cheapest: run local only.
-- If cloud: prefer serverless Postgres + pay-per-use compute.
-- Cloud SQL is always-on; set a billing alert if you use it.
-
-## Docs
-
-- [Onboarding guide](docs/ONBOARDING.md)
-- [GCP deployment](docs/DEPLOY_GCP.md)
-- [Frontend style guide](docs/STYLE_GUIDE.md)
-- [Project status](docs/tasks.md)
+GCP deployment (Cloud Run + Cloud Scheduler + Neon Postgres + Vercel) is documented in `docs/DEPLOY_GCP.md`.
