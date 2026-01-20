@@ -1,10 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import { prisma } from "../prisma.js";
+import { Prisma, prisma } from "../prisma.js";
 import { loadEnv } from "../env.js";
 import { requireUserFromInternalRequest } from "../auth.js";
 
 type ManualFinancePayload = {
-  data?: Record<string, unknown>;
+  data?: Prisma.InputJsonValue;
 };
 
 export async function manualDataRoutes(app: FastifyInstance) {
@@ -26,7 +26,7 @@ export async function manualDataRoutes(app: FastifyInstance) {
     if (!user) return;
 
     const payload = req.body as ManualFinancePayload | null;
-    if (!payload || typeof payload.data !== "object" || payload.data === null) {
+    if (!payload || payload.data === null || payload.data === undefined) {
       reply.status(400).send({ ok: false, error: "invalid_payload" });
       return;
     }
