@@ -33,9 +33,9 @@ COPY packages/shared packages/shared
 COPY apps/api apps/api
 
 # Prisma generate + TS build
-RUN pnpm --filter @health-agent/shared build
-RUN pnpm --filter @health-agent/api prisma:generate
-RUN pnpm --filter @health-agent/api build
+RUN pnpm --filter @finance-agent/shared build
+RUN pnpm --filter @finance-agent/api prisma:generate
+RUN pnpm --filter @finance-agent/api build
 
 # --- runtime ---
 FROM node:20-bookworm-slim AS runtime

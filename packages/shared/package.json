@@ -1,5 +1,5 @@
 {
-  "name": "@health-agent/shared",
+  "name": "@finance-agent/shared",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",

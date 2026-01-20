@@ -1,8 +1,7 @@
 import Fastify from "fastify";
-import { ingestRoutes } from "./routes/ingest.js";
 import { pipelineRoutes } from "./routes/pipeline.js";
-import { insightsRoutes } from "./routes/insights.js";
-import { dataQualityRoutes } from "./routes/dataQuality.js";
+import { categoryRoutes } from "./routes/categories.js";
+import { transactionRoutes } from "./routes/transactions.js";
 
 export function createApp() {
   const app = Fastify({
@@ -22,10 +21,9 @@ export function createApp() {
     return { ok: true };
   });
 
-  app.register(ingestRoutes, { prefix: "/api/ingest" });
   app.register(pipelineRoutes, { prefix: "/api/pipeline" });
-  app.register(insightsRoutes, { prefix: "/api/insights" });
-  app.register(dataQualityRoutes, { prefix: "/api/data-quality" });
+  app.register(categoryRoutes, { prefix: "/api/categories" });
+  app.register(transactionRoutes, { prefix: "/api/transactions" });
 
   return app;
 }

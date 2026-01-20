@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "cd ../.. && pnpm i --frozen-lockfile",
-  "buildCommand": "cd ../.. && pnpm --filter @health-agent/web build",
-  "devCommand": "cd ../.. && pnpm --filter @health-agent/web dev"
+  "buildCommand": "cd ../.. && pnpm --filter @finance-agent/web build",
+  "devCommand": "cd ../.. && pnpm --filter @finance-agent/web dev"
 }

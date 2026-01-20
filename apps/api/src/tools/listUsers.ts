@@ -12,7 +12,6 @@ async function run() {
       id: true,
       name: true,
       email: true,
-      ingestTokenPreview: true,
       createdAt: true,
       updatedAt: true
     }

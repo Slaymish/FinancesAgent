@@ -1,5 +1,5 @@
 {
-  "name": "@health-agent/api",
+  "name": "@finance-agent/api",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,9 +8,7 @@
     "start": "node dist/server.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "smoke": "tsx src/smoke.ts",
-    "parse:test": "tsx src/parsers/healthAutoExport.test.ts",
-    "seed:sample": "tsx src/tools/ingestSampleAndRun.ts",
-    "insights:sanitize": "tsx src/tools/sanitizeInsightsDocs.ts",
+    "seed:sample": "tsx src/tools/seedDemoData.ts",
     "users:list": "tsx src/tools/listUsers.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
@@ -18,10 +16,8 @@
     "prisma:studio": "prisma studio"
   },
   "dependencies": {
-    "@google-cloud/storage": "^7.16.0",
-    "@health-agent/shared": "workspace:*",
+    "@finance-agent/shared": "workspace:*",
     "@prisma/client": "^5.22.0",
-    "diff": "^5.2.0",
     "dotenv": "^16.4.5",
     "fastify": "^4.28.1",
     "zod": "^3.24.1"

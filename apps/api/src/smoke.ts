@@ -6,7 +6,7 @@ import { ensureLegacyUser, LEGACY_USER_ID } from "./auth.js";
 async function run() {
   loadDotenv();
   const env = loadEnv();
-  await ensureLegacyUser(env);
+  await ensureLegacyUser();
 
   const app = createApp();
 
@@ -14,21 +14,22 @@ async function run() {
   const pipelineHeaders = env.PIPELINE_TOKEN ? { ...baseHeaders, "x-pipeline-token": env.PIPELINE_TOKEN } : baseHeaders;
 
   const health = await app.inject({ method: "GET", url: "/health" });
-  const status = await app.inject({ method: "GET", url: "/api/ingest/status", headers: baseHeaders });
   const pipeline = await app.inject({ method: "POST", url: "/api/pipeline/run", headers: pipelineHeaders });
+  const summary = await app.inject({ method: "GET", url: "/api/transactions/summary", headers: baseHeaders });
 
   // eslint-disable-next-line no-console
   console.log("/health", health.statusCode, health.body);
   // eslint-disable-next-line no-console
-  console.log("/api/ingest/status", status.statusCode, status.body);
   // eslint-disable-next-line no-console
   console.log("/api/pipeline/run", pipeline.statusCode, pipeline.body);
+  // eslint-disable-next-line no-console
+  console.log("/api/transactions/summary", summary.statusCode, summary.body);
 
   await app.close();
 
   if (health.statusCode !== 200) process.exit(1);
-  if (status.statusCode !== 200) process.exit(1);
   if (pipeline.statusCode !== 200) process.exit(1);
+  if (summary.statusCode !== 200) process.exit(1);
 }
 
 run().catch((err) => {

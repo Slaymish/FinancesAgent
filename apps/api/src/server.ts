@@ -9,7 +9,7 @@ loadDotenv();
 const env = loadEnv();
 
 await applyMigrations(env);
-await ensureLegacyUser(env);
+await ensureLegacyUser();
 
 const app = createApp();
 

@@ -9,35 +9,21 @@ datasource db {
 }
 
 model User {
-  id             String   @id @default(cuid())
-  name           String?
-  email          String?  @unique
-  emailVerified  DateTime? @map("email_verified")
-  image          String?
-  ingestTokenHash    String   @map("ingest_token_hash")
-  ingestTokenPreview String   @map("ingest_token_preview")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-  targetWeightKg Float? @map("target_weight_kg")
-  targetCalories Int? @map("target_calories")
-  targetProteinG Float? @map("target_protein_g")
-  targetFatG Float? @map("target_fat_g")
-  targetCarbsG Float? @map("target_carbs_g")
-  targetSleepHours Float? @map("target_sleep_hours")
-  targetTrainingSessions Int? @map("target_training_sessions")
-  targetFibreG Float? @map("target_fibre_g")
-  insightsSystemPrompt String? @db.Text @map("insights_system_prompt")
+  id            String   @id @default(cuid())
+  name          String?
+  email         String?  @unique
+  emailVerified DateTime? @map("email_verified")
+  image         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
-  accounts    Account[]
-  sessions    Session[]
-  ingestFiles IngestFile[]
-  dailyWeights DailyWeight[]
-  dailyNutrition DailyNutrition[]
-  sleepSessions SleepSession[]
-  workouts    Workout[]
-  dailyVitals DailyVitals[]
-  insightsDocs InsightsDoc[]
-  pipelineRuns PipelineRun[]
+  accounts      Account[]
+  sessions      Session[]
+  bankAccounts  BankAccount[]
+  transactions  Transaction[]
+  categoryRules CategoryRule[]
+  pipelineRuns  PipelineRun[]
+  syncState     FinanceSyncState?
 
   @@map("users")
 }
@@ -86,123 +72,85 @@ model VerificationToken {
   @@map("verification_tokens")
 }
 
-model IngestFile {
+model BankAccount {
   id          String   @id @default(cuid())
   userId      String   @map("user_id")
-  source      String
-  checksum    String
-  storageKey  String   @map("storage_key")
-  receivedAt  DateTime @default(now()) @map("received_at")
-  processedAt DateTime? @map("processed_at")
+  akahuId     String   @map("akahu_id")
+  name        String
+  institution String?
+  type        String?
+  status      String?
+  currency    String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId, receivedAt])
-  @@unique([userId, source, checksum])
-  @@map("ingest_files")
+  @@unique([userId, akahuId])
+  @@index([userId])
+  @@map("bank_accounts")
 }
 
-model DailyWeight {
-  userId   String   @map("user_id")
-  date     DateTime
-  weightKg Float    @map("weight_kg")
+model Transaction {
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
+  akahuId        String   @map("akahu_id")
+  date           DateTime
+  accountName    String   @map("account_name")
+  amount         Float
+  balance        Float?
+  descriptionRaw String   @map("description_raw")
+  merchantName   String   @map("merchant_name")
+  category       String
+  categoryType   String   @map("category_type")
+  isTransfer     Boolean  @default(false) @map("is_transfer")
+  source         String
+  importedAt     DateTime @default(now()) @map("imported_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@id([userId, date])
-  @@map("daily_weight")
+  @@unique([userId, akahuId])
+  @@index([userId, date])
+  @@map("transactions")
 }
 
-model DailyNutrition {
-  userId    String   @map("user_id")
-  date      DateTime
-  calories  Int?
-  proteinG  Float?   @map("protein_g")
-  carbsG    Float?   @map("carbs_g")
-  fatG      Float?   @map("fat_g")
-  fibreG    Float?   @map("fibre_g")
-  alcoholG  Float?   @map("alcohol_g")
+model CategoryRule {
+  id              String   @id @default(cuid())
+  userId          String   @map("user_id")
+  pattern         String
+  field           String
+  category        String
+  categoryType    String   @map("category_type")
+  priority        Int
+  amountCondition String?  @map("amount_condition")
+  isDisabled      Boolean  @default(false) @map("is_disabled")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@id([userId, date])
-  @@map("daily_nutrition")
+  @@index([userId, priority])
+  @@map("category_rules")
 }
 
-model SleepSession {
-  id          String   @id @default(cuid())
-  userId      String   @map("user_id")
-  dedupeKey   String?  @map("dedupe_key")
-  start       DateTime
-  end         DateTime
-  durationMin Int      @map("duration_min")
-  quality     String?
+model FinanceSyncState {
+  userId       String   @id @map("user_id")
+  lastSyncedAt DateTime? @map("last_synced_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId, start])
-  @@unique([userId, dedupeKey])
-  @@map("sleep_sessions")
-}
-
-model Workout {
-  id          String   @id @default(cuid())
-  userId      String   @map("user_id")
-  sourceId    String?  @map("source_id")
-  start       DateTime
-  type        String
-  durationMin Int      @map("duration_min")
-  distanceKm  Float?   @map("distance_km")
-  avgHr       Int?     @map("avg_hr")
-  maxHr       Int?     @map("max_hr")
-  avgPace     Float?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, start])
-  @@unique([userId, sourceId])
-  @@map("workouts")
-}
-
-model DailyVitals {
-  userId     String   @map("user_id")
-  date       DateTime
-  restingHr  Int?     @map("resting_hr")
-  hrv        Float?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@id([userId, date])
-  @@map("daily_vitals")
-}
-
-model InsightsDoc {
-  id           String   @id @default(cuid())
-  userId       String   @map("user_id")
-  createdAt    DateTime @default(now()) @map("created_at")
-  markdown     String
-  diffFromPrev String?  @map("diff_from_prev")
-  metricsPack  Json?    @map("metrics_pack")
-
-  pipelineRunId String?     @map("pipeline_run_id")
-  pipelineRun   PipelineRun? @relation(fields: [pipelineRunId], references: [id], onDelete: SetNull)
-  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-  @@index([pipelineRunId])
-  @@map("insights_docs")
+  @@map("finance_sync_state")
 }
 
 model PipelineRun {
-  id         String   @id @default(cuid())
-  userId     String   @map("user_id")
-  createdAt  DateTime @default(now()) @map("created_at")
-  metricsPack Json     @map("metrics_pack")
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+  metricsPack   Json     @map("metrics_pack")
+  processedCount Int     @map("processed_count")
 
-  processedIngestCount Int @map("processed_ingest_count")
-
-  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  insightsDocs InsightsDoc[]
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
   @@map("pipeline_runs")
