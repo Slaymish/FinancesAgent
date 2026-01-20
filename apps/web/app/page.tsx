@@ -1,4 +1,4 @@
-import { PageHeader } from "./components/ui";
+import { Card, PageHeader } from "./components/ui";
 import { demoSummary } from "./demo-data";
 import { formatCurrency, formatDateTime } from "./lib/format";
 import { getSessionOrNull } from "./lib/session";
