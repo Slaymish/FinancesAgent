@@ -56,18 +56,57 @@ export type ManualGoals = {
   tripTarget: number | "";
 };
 
+export type ManualIncome = {
+  expectedMonthly: number | "";
+  frequency: "weekly" | "fortnightly" | "monthly" | "annual" | "";
+};
+
+export type ManualBudget = {
+  monthStart: number | "";
+  bufferPct: number | "";
+};
+
+export type ManualPreferences = {
+  currency: string;
+  timezone: string;
+  horizonMonths: number | "";
+  rounding: number | "";
+};
+
 export type ManualData = {
   accounts: ManualAccount[];
   upcomingExpenses: UpcomingExpense[];
   savingsTargetRate: number | "";
   goals: ManualGoals;
+  income: ManualIncome;
+  budget: ManualBudget;
+  preferences: ManualPreferences;
+};
+
+type CategoryRuleForm = {
+  localId: string;
+  pattern: string;
+  field: "description_raw" | "merchant_normalised";
+  category: string;
+  categoryType: string;
+  priority: number | "";
+  amountCondition: string;
+  isDisabled: boolean;
 };
 
 const emptyManualData: ManualData = {
   accounts: [],
   upcomingExpenses: [],
   savingsTargetRate: "",
-  goals: { emergencyTarget: "", tripTarget: "" }
+  goals: { emergencyTarget: "", tripTarget: "" },
+  income: { expectedMonthly: "", frequency: "" },
+  budget: { monthStart: "", bufferPct: "" },
+  preferences: {
+    currency: "NZD",
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC",
+    horizonMonths: 12,
+    rounding: 2
+  }
 };
 
 const scenarioOptions = [
@@ -149,7 +188,10 @@ function normalizeManualData(value: ManualData | null | undefined): ManualData {
     ...value,
     accounts: Array.isArray(value.accounts) ? value.accounts : [],
     upcomingExpenses: Array.isArray(value.upcomingExpenses) ? value.upcomingExpenses : [],
-    goals: { ...emptyManualData.goals, ...(value.goals ?? {}) }
+    goals: { ...emptyManualData.goals, ...(value.goals ?? {}) },
+    income: { ...emptyManualData.income, ...(value.income ?? {}) },
+    budget: { ...emptyManualData.budget, ...(value.budget ?? {}) },
+    preferences: { ...emptyManualData.preferences, ...(value.preferences ?? {}) }
   };
 }
 
@@ -170,6 +212,9 @@ export function DashboardTabs({
   const [decisionMonths, setDecisionMonths] = useState(3);
   const [activeTab, setActiveTab] = useState(defaultTabByPage[page]);
   const [manualData, setManualData] = useState<ManualData>(() => normalizeManualData(initialManualData));
+  const [categoryRules, setCategoryRules] = useState<CategoryRuleForm[]>([]);
+  const [categoryStatus, setCategoryStatus] = useState<"idle" | "loading" | "saving" | "saved" | "error">("idle");
+  const [categoryError, setCategoryError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const saveTimer = useRef<number | null>(null);
   const hasMounted = useRef(false);
@@ -248,19 +293,44 @@ export function DashboardTabs({
     setActiveTab(defaultTabByPage[page]);
   }, [page]);
 
-  const latestByAccount = useMemo(() => {
-    const map = new Map<string, Transaction>();
-    latest.forEach((tx) => {
-      if (!tx.accountName) return;
-      const existing = map.get(tx.accountName);
-      if (!existing || new Date(tx.date).getTime() > new Date(existing.date).getTime()) {
-        map.set(tx.accountName, tx);
-      }
-    });
-    return map;
-  }, [latest]);
+  useEffect(() => {
+    if (isDemo) return;
+    let isMounted = true;
+    setCategoryStatus("loading");
+    setCategoryError(null);
+    fetch("/api/categories")
+      .then(async (res) => {
+        const body = (await res.json().catch(() => ({}))) as { rules?: CategoryRuleForm[] };
+        if (!res.ok) throw new Error("failed");
+        const rules = Array.isArray(body.rules) ? body.rules : [];
+        const normalized = rules.map((rule, index) => ({
+          localId: (rule as { id?: string }).id ?? createId(),
+          pattern: (rule as { pattern?: string }).pattern ?? "",
+          field:
+            (rule as { field?: string }).field === "description_raw" ? "description_raw" : "merchant_normalised",
+          category: (rule as { category?: string }).category ?? "",
+          categoryType: (rule as { categoryType?: string }).categoryType ?? "",
+          priority:
+            typeof (rule as { priority?: number }).priority === "number" ? (rule as { priority?: number }).priority : index + 1,
+          amountCondition: (rule as { amountCondition?: string | null }).amountCondition ?? "",
+          isDisabled: Boolean((rule as { isDisabled?: boolean }).isDisabled)
+        }));
+        if (isMounted) {
+          setCategoryRules(normalized);
+          setCategoryStatus("idle");
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setCategoryStatus("error");
+          setCategoryError("Failed to load rules");
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [isDemo]);
 
-  const connectedAccounts = Array.from(latestByAccount.keys());
   const latestTransaction = latest.reduce<Transaction | null>((greatest, tx) => {
     if (!greatest) return tx;
     return new Date(tx.date).getTime() > new Date(greatest.date).getTime() ? tx : greatest;
@@ -317,8 +387,6 @@ export function DashboardTabs({
   const discretionarySpend = byType.want ?? 0;
   const splitTotal = fixedSpend + discretionarySpend || 1;
   const fixedPct = (fixedSpend / splitTotal) * 100;
-
-  const selectedCategoryData = topCategories.find((item) => item.category === selectedCategory) ?? categoryList[0];
 
   const allocationTotals = manualData.accounts.reduce(
     (acc, account) => {
@@ -425,14 +493,6 @@ export function DashboardTabs({
     { label: "Base spend", value: `${formatCurrency(baseExpense)} / mo` },
     { label: "Scenario net", value: `${formatCurrency(scenarioNet)} / mo` }
   ];
-  const localeOptions = Intl.DateTimeFormat().resolvedOptions();
-  const preferences = {
-    currency: "NZD",
-    timezone: localeOptions.timeZone ?? "UTC",
-    horizon: "12 months",
-    rounding: "2 decimal places"
-  };
-
   const updateAccount = (id: string, patch: Partial<ManualAccount>) => {
     setManualData((prev) => ({
       ...prev,
@@ -475,6 +535,75 @@ export function DashboardTabs({
     }));
   };
 
+  const updateCategoryRule = (localId: string, patch: Partial<CategoryRuleForm>) => {
+    setCategoryRules((prev) => prev.map((rule) => (rule.localId === localId ? { ...rule, ...patch } : rule)));
+  };
+
+  const addCategoryRule = () => {
+    setCategoryRules((prev) => [
+      ...prev,
+      {
+        localId: createId(),
+        pattern: "",
+        field: "merchant_normalised",
+        category: "",
+        categoryType: "",
+        priority: prev.length + 1,
+        amountCondition: "",
+        isDisabled: false
+      }
+    ]);
+  };
+
+  const removeCategoryRule = (localId: string) => {
+    setCategoryRules((prev) => prev.filter((rule) => rule.localId !== localId));
+  };
+
+  const saveCategoryRules = async () => {
+    if (isDemo) return;
+    setCategoryStatus("saving");
+    setCategoryError(null);
+    try {
+      const payloadRules = categoryRules.map((rule, index) => ({
+        pattern: rule.pattern.trim(),
+        field: rule.field,
+        category: rule.category.trim(),
+        categoryType: rule.categoryType.trim(),
+        priority: typeof rule.priority === "number" ? rule.priority : index + 1,
+        amountCondition: rule.amountCondition.trim() || null,
+        isDisabled: rule.isDisabled
+      }));
+      const res = await fetch("/api/categories", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ rules: payloadRules })
+      });
+      if (!res.ok) throw new Error("save_failed");
+      setCategoryStatus("saved");
+    } catch {
+      setCategoryStatus("error");
+      setCategoryError("Save failed");
+    }
+  };
+
+  const reapplyCategoryRules = async () => {
+    if (isDemo) return;
+    try {
+      await fetch("/api/categories/reapply", { method: "POST" });
+    } catch {
+      setCategoryError("Reapply failed");
+    }
+  };
+
+  const categorySaveLabel =
+    categoryStatus === "saving"
+      ? "Saving"
+      : categoryStatus === "saved"
+        ? "Saved"
+        : categoryStatus === "error"
+          ? "Error"
+          : "Save";
+
   const dashboardTabs = [
     {
       id: "overview",
@@ -482,7 +611,7 @@ export function DashboardTabs({
       hint: "Net worth + runway",
       content: (
         <div className="dashboard-grid cols-2">
-          <Card title="Net worth & runway" subtitle="Quick health check">
+          <Card title="Net worth & runway">
             <div className="glance-grid">
               <div className="glance-block">
                 <div className="glance-title-row">
@@ -493,10 +622,9 @@ export function DashboardTabs({
                 {netWorthSeries.length > 0 ? (
                   <>
                     <SparkLine data={netWorthSeries.map((item) => ({ value: item.value }))} height={80} />
-                    <p className="muted small">12 months of movement</p>
                   </>
                 ) : (
-                  <p className="muted small">Add balances to unlock net worth history.</p>
+                  <p className="muted small">Add balances.</p>
                 )}
               </div>
               <div className="glance-block">
@@ -517,7 +645,7 @@ export function DashboardTabs({
               </div>
             </div>
           </Card>
-          <Card title="Income vs spending" subtitle="Recent months">
+          <Card title="Income vs spending">
             <div className="comparison-bars">
               {incomeVsSpend.map((item) => (
                 <div key={item.label} className="comparison-bars__row">
@@ -538,7 +666,6 @@ export function DashboardTabs({
                 </div>
               ))}
             </div>
-            <p className="muted small">Income vs spending over the last six months.</p>
           </Card>
         </div>
       )
@@ -549,10 +676,10 @@ export function DashboardTabs({
       hint: "Trend + categories",
       content: (
         <div className="dashboard-grid cols-2">
-          <Card title="Monthly spending trend" subtitle="Last six months">
+          <Card title="Monthly spending trend">
             <SparkBars data={spendingTrend.map((item) => ({ label: item.label, value: item.value }))} height={120} />
           </Card>
-          <Card title="Category mix" subtitle="Top categories + split">
+          <Card title="Category mix">
             <div className="bar-list">
               {categoryList.map((category) => (
                 <div key={category.category} className="bar-list__row">
@@ -599,9 +726,6 @@ export function DashboardTabs({
                 ))}
               </select>
             </div>
-            <p className="muted small">
-              Trend for {selectedCategoryData?.category || "this category"}: {formatCurrency(selectedCategoryData?.amount ?? null)}
-            </p>
           </Card>
         </div>
       )
@@ -611,7 +735,7 @@ export function DashboardTabs({
       label: "Saving & Wealth",
       hint: "Allocation + breakdown",
       content: (
-        <Card title="Saving & Wealth" subtitle="Allocation & net worth health">
+        <Card title="Saving & Wealth">
           {netWorthSeries.length > 0 ? (
             <SparkLine data={netWorthSeries.map((item) => ({ value: item.value }))} height={90} />
           ) : (
@@ -662,11 +786,11 @@ export function DashboardTabs({
       label: "Planning (light)",
       hint: "Upcoming + goals",
       content: (
-        <Card title="Upcoming commitments" subtitle="Known expenses + goals">
+        <Card title="Upcoming commitments">
           <div className="section-list">
             <strong>Upcoming known expenses</strong>
             {manualData.upcomingExpenses.length === 0 ? (
-              <p className="muted small">Add future expenses to see a simple runway.</p>
+              <p className="muted small">No upcoming expenses.</p>
             ) : (
               <ul className="change-list">
                 {manualData.upcomingExpenses.map((expense) => (
@@ -752,7 +876,7 @@ export function DashboardTabs({
       label: "Scenarios",
       hint: "Income + spending",
       content: (
-        <Card title="Scenarios" subtitle="Income, rent, savings levers">
+        <Card title="Scenarios">
           <div className="chip-row">
             {scenarioOptions.map((option) => (
               <button
@@ -765,7 +889,6 @@ export function DashboardTabs({
               </button>
             ))}
           </div>
-          <p className="muted small">Adjust these levers to see how cash and net worth respond.</p>
         </Card>
       )
     },
@@ -774,7 +897,7 @@ export function DashboardTabs({
       label: "One-off decisions",
       hint: "Affordability",
       content: (
-        <Card title="One-off decisions" subtitle="Can I afford X?">
+        <Card title="One-off decisions">
           <div className="form-grid">
             <div className="field">
               <label htmlFor="decision-label">Decision</label>
@@ -823,20 +946,19 @@ export function DashboardTabs({
               </div>
               <p className="muted small">{planningMessage}</p>
             </div>
-            <div className="glance-block">
-              <div className="glance-title">Net worth preview</div>
-              <div className="glance-value">
-                {typeof decisionAmountValue === "number" ? formatCurrency(-decisionAmountValue) : "—"}
+              <div className="glance-block">
+                <div className="glance-title">Net worth preview</div>
+                <div className="glance-value">
+                  {typeof decisionAmountValue === "number" ? formatCurrency(-decisionAmountValue) : "—"}
+                </div>
               </div>
-              <p className="muted small">One-time change applied now.</p>
             </div>
-          </div>
-          {decisionSeries.length > 0 ? (
-            <SparkLine data={decisionSeries.map((item) => ({ value: item.value }))} height={80} />
-          ) : (
-            <p className="muted small">Enter an amount to see how cash evolves.</p>
-          )}
-        </Card>
+            {decisionSeries.length > 0 ? (
+              <SparkLine data={decisionSeries.map((item) => ({ value: item.value }))} height={80} />
+            ) : (
+              <p className="muted small">Enter an amount.</p>
+            )}
+          </Card>
       )
     },
     {
@@ -845,7 +967,7 @@ export function DashboardTabs({
       hint: "Cash + net worth",
       content: (
         <div className="dashboard-grid cols-2">
-          <Card title="Projections" subtitle="Cash & net worth outlook">
+          <Card title="Projections">
             {projectionSeries.length > 0 ? (
               <>
                 <SparkLine data={projectionSeries.map((item) => ({ value: item.value }))} height={90} />
@@ -857,14 +979,10 @@ export function DashboardTabs({
             ) : (
               <div className="callout">
                 <strong>Add balances to project future snapshots.</strong>
-                <p className="muted small">Projections need current net worth anchors.</p>
               </div>
             )}
-            <p className="muted small">
-              Scenario: {scenarioOptions.find((option) => option.id === scenario)?.label ?? scenario}
-            </p>
           </Card>
-          <Card title="Assumptions summary" subtitle="Basis for every scenario">
+          <Card title="Assumptions summary">
             {assumptionNotes.map((item) => (
               <div key={item.label} className="table-row">
                 <strong>{item.label}</strong>
@@ -883,94 +1001,28 @@ export function DashboardTabs({
       label: "Accounts & Sources",
       hint: "Sync + manual",
       content: (
-        <div className="dashboard-grid cols-2">
-          <Card
-            title="Accounts & Sources"
-            subtitle="Connected accounts, sync status, manual balances"
-            action={<span className={saveMeta.className}>{saveMeta.label}</span>}
-          >
-            <p className="muted small">
-              Connected accounts: {connectedAccounts.length} · Last activity {latestActivityLabel}
-            </p>
-            <div className="stack">
-              {manualData.accounts.length === 0 ? (
-                <p className="muted">No accounts yet. Add one below.</p>
-              ) : (
-                manualData.accounts.map((account) => {
-                  const latestTx = latestByAccount.get(account.name);
-                  return (
-                    <div key={account.id} className="balance-row">
-                      <div>
-                        <div className="category-name">{account.name}</div>
-                        <div className="muted small">
-                          Latest: {latestTx
-                            ? `${new Date(latestTx.date).toLocaleDateString()} · ${latestTx.merchantName || latestTx.descriptionRaw}`
-                            : "—"}
-                        </div>
-                        <div className="muted small">
-                          Last known balance: {latestTx?.balance == null ? "—" : formatCurrency(latestTx.balance)}
-                        </div>
-                      </div>
-                      <div className="balance-controls">
-                        <select
-                          className="input"
-                          value={account.type}
-                          onChange={(event) => updateAccount(account.id, { type: event.target.value as AccountType })}
-                        >
-                          {accountTypeOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          className="input"
-                          value={account.bucket}
-                          onChange={(event) =>
-                            updateAccount(account.id, { bucket: event.target.value as SavingsBucket })
-                          }
-                        >
-                          {bucketOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                        <input
-                          className="input"
-                          type="number"
-                          step="0.01"
-                          placeholder="Balance"
-                          value={account.balance}
-                          onChange={(event) => updateAccount(account.id, { balance: parseAmount(event.target.value) })}
-                        />
-                        <button type="button" className="button ghost" onClick={() => removeAccount(account.id)}>
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-            <div className="divider" />
-            <div className="form-grid">
-              <div className="field">
-                <label htmlFor="account-name">Account</label>
+        <Card title="Accounts" action={<span className={saveMeta.className}>{saveMeta.label}</span>}>
+          <div className="account-grid account-grid__header">
+            <span>Account</span>
+            <span>Type</span>
+            <span>Bucket</span>
+            <span>Balance</span>
+            <span />
+          </div>
+          {manualData.accounts.length === 0 ? (
+            <p className="muted">No accounts yet.</p>
+          ) : (
+            manualData.accounts.map((account) => (
+              <div key={account.id} className="account-grid account-grid__row">
                 <input
-                  id="account-name"
                   className="input"
-                  value={newAccount.name}
-                  onChange={(event) => setNewAccount((prev) => ({ ...prev, name: event.target.value }))}
+                  value={account.name}
+                  onChange={(event) => updateAccount(account.id, { name: event.target.value })}
                 />
-              </div>
-              <div className="field">
-                <label htmlFor="account-type">Type</label>
                 <select
-                  id="account-type"
                   className="input"
-                  value={newAccount.type}
-                  onChange={(event) => setNewAccount((prev) => ({ ...prev, type: event.target.value as AccountType }))}
+                  value={account.type}
+                  onChange={(event) => updateAccount(account.id, { type: event.target.value as AccountType })}
                 >
                   {accountTypeOptions.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -978,16 +1030,10 @@ export function DashboardTabs({
                     </option>
                   ))}
                 </select>
-              </div>
-              <div className="field">
-                <label htmlFor="account-bucket">Bucket</label>
                 <select
-                  id="account-bucket"
                   className="input"
-                  value={newAccount.bucket}
-                  onChange={(event) =>
-                    setNewAccount((prev) => ({ ...prev, bucket: event.target.value as SavingsBucket }))
-                  }
+                  value={account.bucket}
+                  onChange={(event) => updateAccount(account.id, { bucket: event.target.value as SavingsBucket })}
                 >
                   {bucketOptions.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -995,30 +1041,62 @@ export function DashboardTabs({
                     </option>
                   ))}
                 </select>
-              </div>
-              <div className="field">
-                <label htmlFor="account-balance">Balance</label>
                 <input
-                  id="account-balance"
                   className="input"
                   type="number"
                   step="0.01"
-                  value={newAccount.balance}
-                  onChange={(event) => setNewAccount((prev) => ({ ...prev, balance: parseAmount(event.target.value) }))}
+                  value={account.balance}
+                  onChange={(event) => updateAccount(account.id, { balance: parseAmount(event.target.value) })}
                 />
+                <button type="button" className="button ghost" onClick={() => removeAccount(account.id)}>
+                  Remove
+                </button>
               </div>
-            </div>
+            ))
+          )}
+          <div className="divider" />
+          <div className="account-grid account-grid__row">
+            <input
+              className="input"
+              placeholder="Account"
+              value={newAccount.name}
+              onChange={(event) => setNewAccount((prev) => ({ ...prev, name: event.target.value }))}
+            />
+            <select
+              className="input"
+              value={newAccount.type}
+              onChange={(event) => setNewAccount((prev) => ({ ...prev, type: event.target.value as AccountType }))}
+            >
+              {accountTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <select
+              className="input"
+              value={newAccount.bucket}
+              onChange={(event) => setNewAccount((prev) => ({ ...prev, bucket: event.target.value as SavingsBucket }))}
+            >
+              {bucketOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <input
+              className="input"
+              type="number"
+              step="0.01"
+              placeholder="0"
+              value={newAccount.balance}
+              onChange={(event) => setNewAccount((prev) => ({ ...prev, balance: parseAmount(event.target.value) }))}
+            />
             <button type="button" className="button" onClick={addAccount}>
-              Add account
+              Add
             </button>
-          </Card>
-          <Card title="Data sources & sync status" subtitle="Trust layer">
-            <div className="callout">
-              <strong>Sync status not available yet</strong>
-              <p className="muted small">Feed health will appear once providers share balance metadata.</p>
-            </div>
-          </Card>
-        </div>
+          </div>
+        </Card>
       )
     },
     {
@@ -1026,22 +1104,44 @@ export function DashboardTabs({
       label: "Income",
       hint: "Sources + cadence",
       content: (
-        <Card title="Income" subtitle="Sources, start dates, frequency">
-          <div className="table-row">
-            <strong>Last 30 days</strong>
-            <span>{formatCurrency(totals.income30)}</span>
-          </div>
-          <div className="table-row">
-            <strong>Six-month average</strong>
-            <span>{formatCurrency(baseIncome)}</span>
-          </div>
-          <div className="table-row">
-            <strong>Assumed frequency</strong>
-            <span>Monthly</span>
-          </div>
-          <div className="table-row">
-            <strong>Variance vs actual</strong>
-            <span>{formatCurrency(baseIncome - totals.income30)}</span>
+        <Card title="Income">
+          <div className="form-grid">
+            <div className="field">
+              <label htmlFor="income-expected">Expected monthly</label>
+              <input
+                id="income-expected"
+                className="input"
+                type="number"
+                step="0.01"
+                value={manualData.income.expectedMonthly}
+                onChange={(event) =>
+                  setManualData((prev) => ({
+                    ...prev,
+                    income: { ...prev.income, expectedMonthly: parseAmount(event.target.value) }
+                  }))
+                }
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="income-frequency">Frequency</label>
+              <select
+                id="income-frequency"
+                className="input"
+                value={manualData.income.frequency}
+                onChange={(event) =>
+                  setManualData((prev) => ({
+                    ...prev,
+                    income: { ...prev.income, frequency: event.target.value as ManualIncome["frequency"] }
+                  }))
+                }
+              >
+                <option value="">Select</option>
+                <option value="weekly">Weekly</option>
+                <option value="fortnightly">Fortnightly</option>
+                <option value="monthly">Monthly</option>
+                <option value="annual">Annual</option>
+              </select>
+            </div>
           </div>
         </Card>
       )
@@ -1051,7 +1151,7 @@ export function DashboardTabs({
       label: "Savings Rules",
       hint: "Targets + buckets",
       content: (
-        <Card title="Savings Rules" subtitle="Targets & allocation rules">
+        <Card title="Savings Rules">
           <div className="field">
             <label htmlFor="target-rate">Target savings rate (%)</label>
             <input
@@ -1068,10 +1168,11 @@ export function DashboardTabs({
             />
           </div>
           {savingsTarget !== null ? (
-            <p className="muted small">Goal this period: {formatCurrency(savingsTarget)}</p>
-          ) : (
-            <p className="muted small">Set a target rate to guide allocations.</p>
-          )}
+            <div className="table-row">
+              <strong>Goal</strong>
+              <span>{formatCurrency(savingsTarget)}</span>
+            </div>
+          ) : null}
           <div className="form-grid">
             <div className="field">
               <label htmlFor="goal-emergency">Emergency target</label>
@@ -1108,7 +1209,6 @@ export function DashboardTabs({
               />
             </div>
           </div>
-          <p className="muted small">Allocation rules route manual balances into buckets automatically.</p>
         </Card>
       )
     },
@@ -1117,26 +1217,90 @@ export function DashboardTabs({
       label: "Categorisation",
       hint: "Rules + priority",
       content: (
-        <Card title="Categorisation" subtitle="Category list & rules">
-          <div className="change-list">
-            {topCategories.slice(0, 5).map((category) => (
-              <div key={category.category} className="change-item">
-                <div className="change-meta">
-                  <span>{category.category}</span>
-                  <Badge tone={category.categoryType === "discretionary" ? "negative" : "positive"}>
-                    {category.categoryType || "rule"}
-                  </Badge>
-                </div>
-                <strong>{formatCurrency(category.amount)}</strong>
-              </div>
-            ))}
+        <Card
+          title="Category Rules"
+          action={
+            <div className="chip-row">
+              <button type="button" className="chip-button" onClick={saveCategoryRules} disabled={isDemo}>
+                {categorySaveLabel}
+              </button>
+              <button type="button" className="chip-button" onClick={reapplyCategoryRules} disabled={isDemo}>
+                Reapply
+              </button>
+            </div>
+          }
+        >
+          <div className="rule-grid rule-grid__header">
+            <span>Pattern</span>
+            <span>Field</span>
+            <span>Category</span>
+            <span>Type</span>
+            <span>Priority</span>
+            <span>Amount</span>
+            <span>Off</span>
+            <span />
           </div>
-          <p className="muted small">
-            Rules apply by priority, with a fallback category for uncategorised merchants.
-          </p>
-          <button type="button" className="chip-button">
-            Test transaction rule
+          {categoryRules.length === 0 ? (
+            <p className="muted">No rules yet.</p>
+          ) : (
+            categoryRules.map((rule) => (
+              <div key={rule.localId} className="rule-grid rule-grid__row">
+                <input
+                  className="input"
+                  value={rule.pattern}
+                  onChange={(event) => updateCategoryRule(rule.localId, { pattern: event.target.value })}
+                />
+                <select
+                  className="input"
+                  value={rule.field}
+                  onChange={(event) =>
+                    updateCategoryRule(rule.localId, {
+                      field: event.target.value === "description_raw" ? "description_raw" : "merchant_normalised"
+                    })
+                  }
+                >
+                  <option value="merchant_normalised">Merchant</option>
+                  <option value="description_raw">Description</option>
+                </select>
+                <input
+                  className="input"
+                  value={rule.category}
+                  onChange={(event) => updateCategoryRule(rule.localId, { category: event.target.value })}
+                />
+                <input
+                  className="input"
+                  value={rule.categoryType}
+                  onChange={(event) => updateCategoryRule(rule.localId, { categoryType: event.target.value })}
+                />
+                <input
+                  className="input"
+                  type="number"
+                  min="1"
+                  value={rule.priority}
+                  onChange={(event) => updateCategoryRule(rule.localId, { priority: parseAmount(event.target.value) })}
+                />
+                <input
+                  className="input"
+                  value={rule.amountCondition}
+                  onChange={(event) => updateCategoryRule(rule.localId, { amountCondition: event.target.value })}
+                />
+                <input
+                  className="input checkbox"
+                  type="checkbox"
+                  checked={rule.isDisabled}
+                  onChange={(event) => updateCategoryRule(rule.localId, { isDisabled: event.target.checked })}
+                />
+                <button type="button" className="button ghost" onClick={() => removeCategoryRule(rule.localId)}>
+                  Remove
+                </button>
+              </div>
+            ))
+          )}
+          <div className="divider" />
+          <button type="button" className="button" onClick={addCategoryRule}>
+            Add rule
           </button>
+          {categoryError ? <p className="muted small">{categoryError}</p> : null}
         </Card>
       )
     },
@@ -1145,18 +1309,43 @@ export function DashboardTabs({
       label: "Spending Structure",
       hint: "Fixed vs discretionary",
       content: (
-        <Card title="Spending Structure" subtitle="Fixed vs discretionary thresholds">
-          <div className="split-meter">
-            <span className="split-meter__segment fixed" style={{ width: `${fixedPct}%` }} />
-            <span className="split-meter__segment discretionary" style={{ width: `${100 - fixedPct}%` }} />
+        <Card title="Spending Structure">
+          <div className="form-grid">
+            <div className="field">
+              <label htmlFor="budget-month-start">Month start day</label>
+              <input
+                id="budget-month-start"
+                className="input"
+                type="number"
+                min="1"
+                max="28"
+                value={manualData.budget.monthStart}
+                onChange={(event) =>
+                  setManualData((prev) => ({
+                    ...prev,
+                    budget: { ...prev.budget, monthStart: parseAmount(event.target.value) }
+                  }))
+                }
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="budget-buffer">Buffer (%)</label>
+              <input
+                id="budget-buffer"
+                className="input"
+                type="number"
+                min="0"
+                step="0.1"
+                value={manualData.budget.bufferPct}
+                onChange={(event) =>
+                  setManualData((prev) => ({
+                    ...prev,
+                    budget: { ...prev.budget, bufferPct: parseAmount(event.target.value) }
+                  }))
+                }
+              />
+            </div>
           </div>
-          <div className="split-labels">
-            <span>Month start: 1st</span>
-            <span>Budget buffer: +5% buffer</span>
-          </div>
-          <p className="muted small">
-            Adjust fixed/discretionary thresholds to keep essentials comfortable and discretionary spending intentional.
-          </p>
         </Card>
       )
     },
@@ -1165,22 +1354,69 @@ export function DashboardTabs({
       label: "Preferences",
       hint: "Currency + timezone",
       content: (
-        <Card title="Preferences" subtitle="Currency, timezone, projections">
-          <div className="table-row">
-            <strong>Currency</strong>
-            <span>{preferences.currency}</span>
-          </div>
-          <div className="table-row">
-            <strong>Timezone</strong>
-            <span>{preferences.timezone}</span>
-          </div>
-          <div className="table-row">
-            <strong>Projection horizon</strong>
-            <span>{preferences.horizon}</span>
-          </div>
-          <div className="table-row">
-            <strong>Rounding</strong>
-            <span>{preferences.rounding}</span>
+        <Card title="Preferences">
+          <div className="form-grid">
+            <div className="field">
+              <label htmlFor="pref-currency">Currency</label>
+              <input
+                id="pref-currency"
+                className="input"
+                value={manualData.preferences.currency}
+                onChange={(event) =>
+                  setManualData((prev) => ({
+                    ...prev,
+                    preferences: { ...prev.preferences, currency: event.target.value }
+                  }))
+                }
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="pref-timezone">Timezone</label>
+              <input
+                id="pref-timezone"
+                className="input"
+                value={manualData.preferences.timezone}
+                onChange={(event) =>
+                  setManualData((prev) => ({
+                    ...prev,
+                    preferences: { ...prev.preferences, timezone: event.target.value }
+                  }))
+                }
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="pref-horizon">Projection horizon (months)</label>
+              <input
+                id="pref-horizon"
+                className="input"
+                type="number"
+                min="1"
+                value={manualData.preferences.horizonMonths}
+                onChange={(event) =>
+                  setManualData((prev) => ({
+                    ...prev,
+                    preferences: { ...prev.preferences, horizonMonths: parseAmount(event.target.value) }
+                  }))
+                }
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="pref-rounding">Rounding (decimals)</label>
+              <input
+                id="pref-rounding"
+                className="input"
+                type="number"
+                min="0"
+                max="4"
+                value={manualData.preferences.rounding}
+                onChange={(event) =>
+                  setManualData((prev) => ({
+                    ...prev,
+                    preferences: { ...prev.preferences, rounding: parseAmount(event.target.value) }
+                  }))
+                }
+              />
+            </div>
           </div>
         </Card>
       )
@@ -1193,7 +1429,7 @@ export function DashboardTabs({
       label: "Transactions",
       hint: "Filters + edits",
       content: (
-        <Card title="Transactions" subtitle="Full transaction list">
+        <Card title="Transactions">
           <div className="table-wrap">
             <table className="table">
               <thead>
@@ -1226,52 +1462,14 @@ export function DashboardTabs({
       )
     },
     {
-      id: "rules",
-      label: "Rules & Overrides",
-      hint: "Conflicts + logs",
-      content: (
-        <div className="dashboard-grid cols-2">
-          <Card title="Rules & Overrides" subtitle="Per-transaction overrides & logs">
-            <p className="muted small">
-              Rule application log, conflict resolution, and overrides surface here when manual edits happen.
-            </p>
-            <div className="change-list">
-              {topCategories.slice(0, 3).map((category) => (
-                <div key={category.category} className="change-item">
-                  <div className="change-meta">
-                    <span>{category.category}</span>
-                    <Badge tone="neutral">{category.categoryType}</Badge>
-                  </div>
-                  <strong>{formatCurrency(category.amount)}</strong>
-                  <p className="muted small">Rules fire in priority order, with overrides at the top.</p>
-                </div>
-              ))}
-            </div>
-          </Card>
-          <Card title="Corrections & adjustments" subtitle="Manual edits">
-            <div className="callout">
-              <strong>Manual adjustments ready</strong>
-              <p className="muted small">
-                Recode transactions, split merchants, or add notes without noise. Overrides layer on top of rules.
-              </p>
-              <button type="button" className="button">
-                Add adjustment
-              </button>
-            </div>
-          </Card>
-        </div>
-      )
-    },
-    {
       id: "imports",
       label: "Imports & Logs",
       hint: "Errors + retries",
       content: (
-        <Card title="Imports & Logs" subtitle="History, errors & retries">
+        <Card title="Imports & Logs">
           <div className="callout">
             <strong>{latest.length} transactions synced</strong>
             <p className="muted small">Last update: {latestActivityLabel}</p>
-            <p className="muted small">Import errors and retries will appear here.</p>
           </div>
         </Card>
       )
@@ -1281,7 +1479,7 @@ export function DashboardTabs({
       label: "Export",
       hint: "CSV + JSON",
       content: (
-        <Card title="Export" subtitle="CSV / JSON / snapshots">
+        <Card title="Export">
           <div className="chip-row">
             <button type="button" className="chip-button">
               Export CSV

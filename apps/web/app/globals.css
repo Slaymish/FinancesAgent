@@ -1531,6 +1531,42 @@ h4 {
   align-items: center;
 }
 
+.account-grid {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.5fr) repeat(3, minmax(120px, 1fr)) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.account-grid__header {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  padding-bottom: 6px;
+}
+
+.rule-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.6fr) minmax(120px, 1fr) minmax(140px, 1fr) minmax(120px, 1fr) 80px minmax(120px, 1fr) 50px auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.rule-grid__header {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  padding-bottom: 6px;
+}
+
+.rule-grid .input.checkbox {
+  width: 16px;
+  height: 16px;
+  justify-self: center;
+}
+
 .glance-grid {
   display: grid;
   gap: 24px;
@@ -1926,6 +1962,16 @@ footer {
 
   .page {
     padding-bottom: 40px;
+  }
+
+  .account-grid,
+  .rule-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .account-grid__header,
+  .rule-grid__header {
+    display: none;
   }
 }
 
