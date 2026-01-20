@@ -37,6 +37,11 @@ steps:
       - $_REGION
       - --platform
       - managed
+      - --allow-unauthenticated
+      - --set-secrets
+      - DATABASE_URL=${_DATABASE_URL_SECRET}:latest,DATABASE_DIRECT_URL=${_DATABASE_DIRECT_URL_SECRET}:latest,AKAHU_APP_TOKEN=${_AKAHU_APP_TOKEN_SECRET}:latest,AKAHU_USER_TOKEN=${_AKAHU_USER_TOKEN_SECRET}:latest
+      - --set-env-vars
+      - API_PORT=8080,INTERNAL_API_KEY=${_INTERNAL_API_KEY},PIPELINE_TOKEN=${_PIPELINE_TOKEN},AKAHU_BASE_URL=${_AKAHU_BASE_URL},AKAHU_LOOKBACK_DAYS=${_AKAHU_LOOKBACK_DAYS},AKAHU_PAGE_SIZE=${_AKAHU_PAGE_SIZE}
       - --quiet
 images:
   - gcr.io/$PROJECT_ID/finance-agent-api:$BUILD_ID
@@ -46,6 +51,13 @@ substitutions:
   _REGION: australia-southeast1
   _DATABASE_URL_SECRET: finance-agent-database-url
   _DATABASE_DIRECT_URL_SECRET: finance-agent-database-direct-url
+  _AKAHU_APP_TOKEN_SECRET: finance-agent-akahu-app-token
+  _AKAHU_USER_TOKEN_SECRET: finance-agent-akahu-user-token
+  _INTERNAL_API_KEY: dev-internal-key
+  _PIPELINE_TOKEN: dev-pipeline-token
+  _AKAHU_BASE_URL: https://api.akahu.io/v1
+  _AKAHU_LOOKBACK_DAYS: "14"
+  _AKAHU_PAGE_SIZE: "250"
 options:
   logging: CLOUD_LOGGING_ONLY
 availableSecrets:

@@ -20,13 +20,18 @@ const monthlyNet12 = Array.from({ length: 12 }, (_, i) => {
   };
 });
 
+const firstDaily = dailySpend30[0] ?? { date: now.toISOString().slice(0, 10), spend: 0 };
+const lastDaily = dailySpend30[dailySpend30.length - 1] ?? firstDaily;
+const firstMonthly = monthlyNet12[0] ?? { month: now.toISOString().slice(0, 7), income: 0, expense: 0, net: 0 };
+const lastMonthly = monthlyNet12[monthlyNet12.length - 1] ?? firstMonthly;
+
 export const demoSummary = {
   metricsPack: {
     generatedAt: now.toISOString(),
     ranges: {
-      d30: { start: dailySpend30[0].date, end: dailySpend30[dailySpend30.length - 1].date },
-      d90: { start: dailySpend30[0].date, end: dailySpend30[dailySpend30.length - 1].date },
-      y12: { start: monthlyNet12[0].month + "-01", end: monthlyNet12[monthlyNet12.length - 1].month + "-01" }
+      d30: { start: firstDaily.date, end: lastDaily.date },
+      d90: { start: firstDaily.date, end: lastDaily.date },
+      y12: { start: `${firstMonthly.month}-01`, end: `${lastMonthly.month}-01` }
     },
     totals: {
       income30: 5400,
