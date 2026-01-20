@@ -16,12 +16,12 @@ export default function SyncButton() {
     setMessage(null);
     try {
       const res = await fetch("/api/sync", { method: "POST" });
-      const body = (await res.json().catch(() => ({}))) as { error?: string; runId?: string };
+      const body = (await res.json().catch(() => ({}))) as { error?: string; runId?: string; pipelineRunId?: string };
       if (!res.ok || body.error) {
         throw new Error(body.error ?? `Sync failed (${res.status})`);
       }
       setStatus("done");
-      setMessage(`Run ${body.runId ?? "completed"}`);
+      setMessage(`Run ${body.pipelineRunId ?? body.runId ?? "completed"}`);
       router.refresh();
     } catch (err) {
       setStatus("error");

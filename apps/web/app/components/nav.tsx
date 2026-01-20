@@ -1,16 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { Activity, ClipboardCheck, Database, TrendingUp } from "lucide-react";
+import { LayoutDashboard, SlidersHorizontal, TrendingUp } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import SyncButton from "./sync-button";
 
 const links = [
-  { href: "/", label: "Status", icon: Activity },
-  { href: "/insights", label: "Review", icon: ClipboardCheck },
+  { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/trends", label: "Trends", icon: TrendingUp },
-  { href: "/data-quality", label: "Data", icon: Database }
+  { href: "/categories", label: "Categories", icon: SlidersHorizontal }
 ];
 
 export default function Nav() {

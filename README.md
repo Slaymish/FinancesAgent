@@ -50,6 +50,8 @@ See `.env.example` for the full list. Common ones:
 
 - `AKAHU_APP_TOKEN`
 - `AKAHU_USER_TOKEN`
+- `AKAHU_BASE_URL` (optional)
+- `AKAHU_LOOKBACK_DAYS` (optional)
 - `INTERNAL_API_KEY`
 - `PIPELINE_TOKEN`
 - `API_BASE_URL` (for the web app to call the API)

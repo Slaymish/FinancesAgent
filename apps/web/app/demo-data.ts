@@ -1,110 +1,123 @@
-// Simple demo payloads shown when a user is signed out.
+const now = new Date();
 
-export const demoPipelineLatest = {
-  latestRun: {
-    id: "demo-run",
-    createdAt: new Date().toISOString(),
-    processedIngestCount: 12,
-    metricsPack: {
-      generatedAt: new Date().toISOString(),
-      weight: {
-        latest: { date: new Date().toISOString(), weightKg: 79.4 },
-        slopeKgPerDay7: -0.06,
-        slopeKgPerDay14: -0.04
-      },
-      nutrition: {
-        avgCalories7: 2250,
-        avgCalories14: 2350,
-        avgProteinG7: 150,
-        avgProteinG14: 142
-      },
-      training: {
-        sessions7: 4,
-        sessions14: 7,
-        minutes7: 210,
-        minutes14: 360
-      },
-      sleep: {
-        avgSleepMin7: 7 * 60 + 20,
-        avgSleepMin14: 7 * 60 + 10
-      },
-      recovery: {
-        avgRestingHr7: 52,
-        avgRestingHr14: 54
-      },
-      trends: {
-        weightSeries: [
-          { date: "2025-01-01", weightKg: 81 },
-          { date: "2025-01-05", weightKg: 80.5 },
-          { date: "2025-01-10", weightKg: 80 },
-          { date: "2025-01-15", weightKg: 79.7 },
-          { date: "2025-01-20", weightKg: 79.4 }
-        ],
-        nutritionSeries: [
-          { date: "2025-01-16", calories: 2200, proteinG: 145 },
-          { date: "2025-01-17", calories: 2400, proteinG: 155 },
-          { date: "2025-01-18", calories: 2300, proteinG: 150 }
-        ],
-        sleepSeries: [
-          { date: "2025-01-18", minutes: 425 },
-          { date: "2025-01-19", minutes: 460 },
-          { date: "2025-01-20", minutes: 450 }
-        ],
-        trainingSeries: [
-          { date: "2025-01-18", minutes: 60 },
-          { date: "2025-01-19", minutes: 45 },
-          { date: "2025-01-20", minutes: 50 }
-        ]
-      },
-      levers: [
-        "Keep protein above 140g/day.",
-        "Hold 3-4 training sessions per week.",
-        "Aim for >7h sleep on travel days."
-      ],
-      goalProjection: {
-        targetWeightKg: 78,
-        deltaToGoalKg: -1.4,
-        observedSlopeKgPerDay14: -0.04,
-        observedSlopeKgPerWeek: -0.28,
-        projectedDaysToGoal: 35,
-        projectedDate: new Date(Date.now() + 35 * 24 * 60 * 60 * 1000).toISOString(),
-        trend: "toward"
-      }
+const dailySpend30 = Array.from({ length: 30 }, (_, i) => {
+  const date = new Date(now.getTime() - (29 - i) * 24 * 60 * 60 * 1000);
+  return {
+    date: date.toISOString().slice(0, 10),
+    spend: 35 + (i % 6) * 12 + (i % 4 === 0 ? 40 : 0)
+  };
+});
+
+const monthlyNet12 = Array.from({ length: 12 }, (_, i) => {
+  const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (11 - i), 1));
+  const income = 4200 + (i % 2) * 120;
+  const expense = 3000 + (i % 3) * 180;
+  return {
+    month: date.toISOString().slice(0, 7),
+    income,
+    expense,
+    net: income - expense
+  };
+});
+
+export const demoSummary = {
+  metricsPack: {
+    generatedAt: now.toISOString(),
+    ranges: {
+      d30: { start: dailySpend30[0].date, end: dailySpend30[dailySpend30.length - 1].date },
+      d90: { start: dailySpend30[0].date, end: dailySpend30[dailySpend30.length - 1].date },
+      y12: { start: monthlyNet12[0].month + "-01", end: monthlyNet12[monthlyNet12.length - 1].month + "-01" }
+    },
+    totals: {
+      income30: 5400,
+      expense30: 3120,
+      net30: 2280
+    },
+    byType30: {
+      essential: 1860,
+      want: 860,
+      saving: 400
+    },
+    trends: {
+      dailySpend30,
+      monthlyNet12,
+      categorySpend30: [
+        { category: "Groceries", amount: 620, categoryType: "essential" },
+        { category: "Rent", amount: 1480, categoryType: "essential" },
+        { category: "Takeaway", amount: 420, categoryType: "want" },
+        { category: "Subscriptions", amount: 160, categoryType: "want" },
+        { category: "Investing", amount: 400, categoryType: "saving" }
+      ]
     }
-  }
-};
-
-export const demoInsightsLatest = {
-  latest: {
-    id: "demo-insight",
-    createdAt: new Date().toISOString(),
-    markdown:
-      "## Weekly synthesis\n- Weight trending down at target pace.\n- Protein average above 140g/day; keep it there.\n- Sleep dipped midweek; set a pre-bed routine on travel days.\n- Training volume steady; consider one interval session for VO2.\n",
-    diffFromPrev: "+ Added note on travel-day sleep\n+ Training volume steady, consider interval session\n",
-    pipelineRunId: "demo-run"
-  }
-};
-
-export const demoInsightsHistory = {
-  docs: [
-    { id: "demo-insight", createdAt: new Date().toISOString(), diffFromPrev: "(initial)", pipelineRunId: "demo-run" }
+  },
+  latestTransactions: [
+    {
+      id: "demo-1",
+      date: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+      accountName: "Main",
+      amount: -68.5,
+      merchantName: "New World",
+      descriptionRaw: "Card purchase",
+      category: "Groceries",
+      categoryType: "essential",
+      source: "demo"
+    },
+    {
+      id: "demo-2",
+      date: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+      accountName: "Main",
+      amount: -24.0,
+      merchantName: "Uber Eats",
+      descriptionRaw: "Food delivery",
+      category: "Takeaway",
+      categoryType: "want",
+      source: "demo"
+    },
+    {
+      id: "demo-3",
+      date: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+      accountName: "Main",
+      amount: 4200,
+      merchantName: "Employer Ltd",
+      descriptionRaw: "Salary",
+      category: "Salary",
+      categoryType: "income",
+      source: "demo"
+    }
   ]
 };
 
-export const demoDataQuality = {
-  range: { start: "2025-01-01", end: "2025-01-20" },
-  lastIngest: {
-    id: "demo-ingest",
-    source: "apple-health",
-    receivedAt: new Date().toISOString(),
-    processedAt: new Date().toISOString()
-  },
-  lastPipelineRun: { id: "demo-run", createdAt: new Date().toISOString(), processedIngestCount: 12 },
-  missingDays: {
-    weight: [],
-    nutrition: ["2025-01-14"],
-    vitals: [],
-    sleep: [],
-    workouts: ["2025-01-13"]
-  }
+export const demoCategories = {
+  rules: [
+    {
+      id: "demo-rule-1",
+      pattern: "COUNTDOWN|PAKNSAVE|NEW WORLD",
+      field: "merchant_normalised",
+      category: "Groceries",
+      categoryType: "essential",
+      priority: 10,
+      amountCondition: null,
+      isDisabled: false
+    },
+    {
+      id: "demo-rule-2",
+      pattern: "UBER|EATS|DELIVEROO",
+      field: "merchant_normalised",
+      category: "Takeaway",
+      categoryType: "want",
+      priority: 20,
+      amountCondition: null,
+      isDisabled: false
+    },
+    {
+      id: "demo-rule-3",
+      pattern: "RENT",
+      field: "description_raw",
+      category: "Rent",
+      categoryType: "essential",
+      priority: 5,
+      amountCondition: null,
+      isDisabled: false
+    }
+  ]
 };

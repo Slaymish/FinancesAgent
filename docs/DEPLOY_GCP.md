@@ -1,28 +1,19 @@
-# Deploy to GCP (Cloud Run + Postgres + GCS + Cloud Scheduler)
+# Deploy to GCP (Cloud Run + Cloud Scheduler + Neon)
 
-Short, low-cost path for the API.
+Low-cost path for the finance API.
 
 ## Quick path
 
-1) Create a GCS bucket  
-2) Use an external/serverless Postgres provider  
-3) Build and deploy the API to Cloud Run  
-4) Add a Cloud Scheduler job for `/api/pipeline/run`  
+1) Use Neon (or another serverless Postgres)
+2) Build and deploy the API to Cloud Run
+3) Add a Cloud Scheduler job for `/api/pipeline/run`
 
 ## Prereqs
 
 ```bash
 gcloud auth login
 gcloud config set project YOUR_PROJECT_ID
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com cloudscheduler.googleapis.com storage.googleapis.com
-```
-
-## Create bucket
-
-```bash
-export BUCKET=health-agent-raw-YOUR_PROJECT_ID
-export REGION=australia-southeast1
-gcloud storage buckets create gs://$BUCKET --location=$REGION
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com cloudscheduler.googleapis.com
 ```
 
 ## Build + deploy
@@ -30,8 +21,9 @@ gcloud storage buckets create gs://$BUCKET --location=$REGION
 ```bash
 gcloud builds submit --config cloudbuild-api.yaml
 
-export SERVICE=health-agent-api
-export IMAGE=gcr.io/$PROJECT_ID/health-agent-api:latest
+export SERVICE=finance-agent-api
+export REGION=australia-southeast1
+export IMAGE=gcr.io/$PROJECT_ID/finance-agent-api:latest
 
 gcloud run deploy $SERVICE \
   --image $IMAGE \
@@ -40,7 +32,7 @@ gcloud run deploy $SERVICE \
   --min-instances 0 \
   --max-instances 1 \
   --set-env-vars \
-API_PORT=8080,STORAGE_PROVIDER=gcs,STORAGE_BUCKET=$BUCKET,INTERNAL_API_KEY=REPLACE_ME,PIPELINE_TOKEN=REPLACE_ME,INSIGHTS_ENABLED=false,DATABASE_URL='REPLACE_WITH_PROVIDER_URL'
+API_PORT=8080,INTERNAL_API_KEY=REPLACE_ME,PIPELINE_TOKEN=REPLACE_ME,AKAHU_APP_TOKEN=REPLACE_ME,AKAHU_USER_TOKEN=REPLACE_ME,DATABASE_URL='REPLACE_WITH_NEON_URL'
 ```
 
 ## Daily pipeline job
@@ -48,7 +40,7 @@ API_PORT=8080,STORAGE_PROVIDER=gcs,STORAGE_BUCKET=$BUCKET,INTERNAL_API_KEY=REPLA
 ```bash
 export API_URL=$(gcloud run services describe $SERVICE --region $REGION --format='value(status.url)')
 
-gcloud scheduler jobs create http health-agent-daily-pipeline \
+gcloud scheduler jobs create http finance-agent-daily-pipeline \
   --location $REGION \
   --schedule "0 3 * * *" \
   --time-zone "UTC" \
@@ -61,5 +53,5 @@ gcloud scheduler jobs create http health-agent-daily-pipeline \
 ## Notes
 
 - Prefer Secret Manager for secrets.
-- Web deploy isn’t covered here; use `API_BASE_URL` for the web app.
-- Cloud SQL is supported but always-on; use it only if you want a managed DB.
+- Web deploy isn’t covered here; use `API_BASE_URL` for the web app on Vercel.
+- Cloud SQL is supported but always-on; keep it off for low usage.

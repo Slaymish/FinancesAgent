@@ -13,18 +13,18 @@ steps:
       - -f
       - apps/api/Dockerfile
       - -t
-      - gcr.io/$PROJECT_ID/health-agent-api:$BUILD_ID
+      - gcr.io/$PROJECT_ID/finance-agent-api:$BUILD_ID
       - -t
-      - gcr.io/$PROJECT_ID/health-agent-api:latest
+      - gcr.io/$PROJECT_ID/finance-agent-api:latest
       - .
   - name: gcr.io/cloud-builders/docker
     args:
       - push
-      - gcr.io/$PROJECT_ID/health-agent-api:$BUILD_ID
+      - gcr.io/$PROJECT_ID/finance-agent-api:$BUILD_ID
   - name: gcr.io/cloud-builders/docker
     args:
       - push
-      - gcr.io/$PROJECT_ID/health-agent-api:latest
+      - gcr.io/$PROJECT_ID/finance-agent-api:latest
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: gcloud
     args:
@@ -32,20 +32,20 @@ steps:
       - deploy
       - $_SERVICE
       - --image
-      - gcr.io/$PROJECT_ID/health-agent-api:$BUILD_ID
+      - gcr.io/$PROJECT_ID/finance-agent-api:$BUILD_ID
       - --region
       - $_REGION
       - --platform
       - managed
       - --quiet
 images:
-  - gcr.io/$PROJECT_ID/health-agent-api:$BUILD_ID
-  - gcr.io/$PROJECT_ID/health-agent-api:latest
+  - gcr.io/$PROJECT_ID/finance-agent-api:$BUILD_ID
+  - gcr.io/$PROJECT_ID/finance-agent-api:latest
 substitutions:
-  _SERVICE: health-agent-api
+  _SERVICE: finance-agent-api
   _REGION: australia-southeast1
-  _DATABASE_URL_SECRET: health-agent-database-url
-  _DATABASE_DIRECT_URL_SECRET: health-agent-database-direct-url
+  _DATABASE_URL_SECRET: finance-agent-database-url
+  _DATABASE_DIRECT_URL_SECRET: finance-agent-database-direct-url
 options:
   logging: CLOUD_LOGGING_ONLY
 availableSecrets:

@@ -4,10 +4,10 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: health_agent
+      POSTGRES_DB: finance_agent
     ports:
       - "5432:5432"
     volumes:
-      - health_agent_pgdata:/var/lib/postgresql/data
+      - finance_agent_pgdata:/var/lib/postgresql/data
 volumes:
-  health_agent_pgdata:
+  finance_agent_pgdata:

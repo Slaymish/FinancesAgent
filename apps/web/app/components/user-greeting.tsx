@@ -29,11 +29,8 @@ export default function UserGreeting() {
         <ChevronDown className="user-menu__chevron" aria-hidden="true" />
       </summary>
       <div className="user-menu__panel" role="menu" aria-label="Account">
-        <Link className="user-menu__item" href="/preferences" role="menuitem">
-          Preferences
-        </Link>
-        <Link className="user-menu__item" href="/connect" role="menuitem">
-          Connect
+        <Link className="user-menu__item" href="/categories" role="menuitem">
+          Categories
         </Link>
         <button className="user-menu__item" type="button" onClick={() => signOut()} role="menuitem">
           Sign out

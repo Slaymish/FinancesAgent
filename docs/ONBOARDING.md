@@ -1,6 +1,6 @@
-# HealthAgent Onboarding
+# FinanceAgent Onboarding
 
-Short, practical notes for getting oriented.
+Quick notes to get oriented.
 
 ## Quickstart (end-to-end)
 
@@ -9,7 +9,7 @@ pnpm i
 pnpm db:up
 pnpm db:generate
 pnpm db:migrate
-pnpm --filter @health-agent/api seed:sample
+pnpm --filter @finance-agent/api seed:sample
 pnpm dev
 ```
 
@@ -20,22 +20,20 @@ pnpm dev
 
 - `apps/api/` — Fastify API + Prisma
 - `apps/web/` — Next.js frontend
-- `storage/local/` — local raw ingest storage
 - `apps/api/prisma/schema.prisma` — canonical schema
 
 ## Key flow (one sentence)
 
-Ingest JSON → store raw → normalize into Postgres → compute metrics → render UI.
+Akahu → Postgres → metrics pack → UI.
 
 ## Where to start reading
 
 1. `apps/api/src/routes/pipeline.ts`
-2. `apps/api/src/routes/ingest.ts`
-3. `apps/api/src/parsers/healthAutoExport.ts`
+2. `apps/api/src/akahu/client.ts`
+3. `apps/api/src/akahu/categoriser.ts`
 4. `apps/web/app/page.tsx`
 
 ## Notes
 
 - API dotenv lives at `apps/api/.env`.
-- Storage providers: `local` and `gcs`.
 - API is ESM, so internal imports use `.js` extensions.

@@ -28,7 +28,9 @@ async function run() {
   await app.close();
 
   if (health.statusCode !== 200) process.exit(1);
-  if (pipeline.statusCode !== 200) process.exit(1);
+  const expectsPipelineOk = !!(env.AKAHU_APP_TOKEN && env.AKAHU_USER_TOKEN);
+  if (expectsPipelineOk && pipeline.statusCode !== 200) process.exit(1);
+  if (!expectsPipelineOk && pipeline.statusCode !== 400) process.exit(1);
   if (summary.statusCode !== 200) process.exit(1);
 }
 

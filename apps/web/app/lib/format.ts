@@ -13,6 +13,20 @@ export function formatNumber(value: number | null | undefined, digits = 1) {
   return Number.isInteger(value) ? value.toString() : value.toFixed(digits);
 }
 
+export function formatCurrency(value: number | null | undefined, options?: { currency?: string; sign?: boolean }) {
+  if (value === null || value === undefined) return "—";
+  if (Number.isNaN(value)) return "—";
+  const currency = options?.currency ?? "NZD";
+  const formatter = new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0
+  });
+  const formatted = formatter.format(Math.abs(value));
+  if (!options?.sign) return value < 0 ? `-${formatted}` : formatted;
+  return value < 0 ? `-${formatted}` : `+${formatted}`;
+}
+
 export function formatMinutes(value: number | null | undefined) {
   if (value === null || value === undefined) return "—";
   if (Number.isNaN(value)) return "—";

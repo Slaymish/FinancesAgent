@@ -7,7 +7,7 @@ import UserGreeting from "./components/user-greeting";
 const themeInitScript = `
 (() => {
   try {
-    const stored = localStorage.getItem('health-agent-theme');
+    const stored = localStorage.getItem('finance-agent-theme');
     const system = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     const theme = stored === 'light' || stored === 'dark' ? stored : system;
     document.documentElement.dataset.theme = theme;
@@ -18,7 +18,7 @@ const themeInitScript = `
 `;
 
 export const metadata = {
-  title: "Health Insights Agent"
+  title: "Finance Agent"
 };
 
 export default function RootLayout({
@@ -46,12 +46,14 @@ export default function RootLayout({
                     strokeLinejoin="round"
                     aria-hidden="true"
                   >
-                    <path d="M12 3 a9 9 0 1 1 -6.36 2.64" />
-                    <circle cx="16.5" cy="7.5" r="1.5" />
+                    <path d="M3 12c0-4.5 3.6-8 9-8s9 3.5 9 8-3.6 8-9 8-9-3.5-9-8Z" />
+                    <path d="M9.5 8.5h5" />
+                    <path d="M9.5 11.5h3.5" />
+                    <path d="M9.5 14.5h4.5" />
                   </svg>
                   <div>
-                    <div className="brand-title">Health Agent</div>
-                    <div className="brand-subtitle">Decide what to do next</div>
+                    <div className="brand-title">Finance Agent</div>
+                    <div className="brand-subtitle">Know where the money moves</div>
                   </div>
                 </div>
                 <Nav />

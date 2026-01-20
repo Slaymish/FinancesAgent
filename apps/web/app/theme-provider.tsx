@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 
 type Theme = "light" | "dark";
 
-const STORAGE_KEY = "health-agent-theme";
+const STORAGE_KEY = "finance-agent-theme";
 
 function getPreferredTheme(): Theme {
   if (typeof window === "undefined") return "light";
