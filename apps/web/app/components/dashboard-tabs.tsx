@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Card } from "./ui";
 import { SparkBars, SparkLine } from "./charts";
 import { formatCurrency, formatNumber } from "../lib/format";
@@ -12,6 +12,7 @@ type Transaction = {
   date: string;
   accountName: string;
   amount: number;
+  balance?: number | null;
   merchantName: string;
   descriptionRaw: string;
   category: string;
@@ -24,6 +25,8 @@ type DashboardTabsProps = {
   monthlyNet: MonthlyNet[];
   topCategories: CategorySpend[];
   latest: Transaction[];
+  isDemo: boolean;
+  initialManualData: ManualData | null;
 };
 
 type ScenarioId = "steady" | "save-5" | "spend-5" | "income-up";
@@ -56,8 +59,6 @@ type ManualData = {
   savingsTargetRate: number | "";
   goals: ManualGoals;
 };
-
-const storageKey = "finance-agent.manualData.v1";
 
 const tabs = [
   { id: "overview", label: "Overview", hint: "10-second read" },
@@ -132,13 +133,34 @@ function formatMaybeCurrency(value: number | null) {
   return formatCurrency(value);
 }
 
-export function DashboardTabs({ totals, byType, monthlyNet, topCategories, latest }: DashboardTabsProps) {
+function normalizeManualData(value: ManualData | null | undefined): ManualData {
+  if (!value) return emptyManualData;
+  return {
+    ...emptyManualData,
+    ...value,
+    accounts: Array.isArray(value.accounts) ? value.accounts : [],
+    upcomingExpenses: Array.isArray(value.upcomingExpenses) ? value.upcomingExpenses : [],
+    goals: { ...emptyManualData.goals, ...(value.goals ?? {}) }
+  };
+}
+
+export function DashboardTabs({
+  totals,
+  byType,
+  monthlyNet,
+  topCategories,
+  latest,
+  isDemo,
+  initialManualData
+}: DashboardTabsProps) {
   const [activeTab, setActiveTab] = useState<(typeof tabs)[number]["id"]>("overview");
   const [selectedCategory, setSelectedCategory] = useState(topCategories[0]?.category ?? "");
   const [showTransactions, setShowTransactions] = useState(false);
   const [scenario, setScenario] = useState<ScenarioId>("steady");
-  const [manualData, setManualData] = useState<ManualData>(emptyManualData);
-  const [hasLoaded, setHasLoaded] = useState(false);
+  const [manualData, setManualData] = useState<ManualData>(() => normalizeManualData(initialManualData));
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const saveTimer = useRef<number | null>(null);
+  const hasMounted = useRef(false);
   const [newAccount, setNewAccount] = useState<ManualAccount>({
     id: "",
     name: "",
@@ -153,42 +175,62 @@ export function DashboardTabs({ totals, byType, monthlyNet, topCategories, lates
   const last3 = useMemo(() => monthlyNet.slice(-3), [monthlyNet]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const raw = window.localStorage.getItem(storageKey);
-    let nextData = emptyManualData;
-    if (raw) {
-      try {
-        nextData = { ...emptyManualData, ...JSON.parse(raw) };
-      } catch {
-        nextData = emptyManualData;
-      }
-    }
-
     const latestAccounts = Array.from(
       new Set(latest.map((tx) => tx.accountName).filter((name) => name && name.trim()))
     );
-    const existingByName = new Map(nextData.accounts.map((account) => [account.name, account]));
-    const mergedAccounts = [...nextData.accounts];
-    latestAccounts.forEach((name) => {
-      if (!existingByName.has(name)) {
-        mergedAccounts.push({
-          id: createId(),
-          name,
-          type: "unclassified",
-          bucket: "",
-          balance: ""
-        });
-      }
-    });
+    if (latestAccounts.length === 0) return;
 
-    setManualData({ ...nextData, accounts: mergedAccounts });
-    setHasLoaded(true);
+    setManualData((prev) => {
+      const existingByName = new Map(prev.accounts.map((account) => [account.name, account]));
+      const mergedAccounts = [...prev.accounts];
+      let changed = false;
+      latestAccounts.forEach((name) => {
+        if (!existingByName.has(name)) {
+          mergedAccounts.push({
+            id: createId(),
+            name,
+            type: "unclassified",
+            bucket: "",
+            balance: ""
+          });
+          changed = true;
+        }
+      });
+      return changed ? { ...prev, accounts: mergedAccounts } : prev;
+    });
   }, [latest]);
 
   useEffect(() => {
-    if (!hasLoaded || typeof window === "undefined") return;
-    window.localStorage.setItem(storageKey, JSON.stringify(manualData));
-  }, [manualData, hasLoaded]);
+    if (isDemo) return;
+    if (!hasMounted.current) {
+      hasMounted.current = true;
+      return;
+    }
+
+    if (saveTimer.current) {
+      window.clearTimeout(saveTimer.current);
+    }
+
+    setSaveStatus("saving");
+    saveTimer.current = window.setTimeout(async () => {
+      try {
+        const res = await fetch("/api/manual-data", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ data: manualData })
+        });
+        setSaveStatus(res.ok ? "saved" : "error");
+      } catch {
+        setSaveStatus("error");
+      }
+    }, 700);
+
+    return () => {
+      if (saveTimer.current) {
+        window.clearTimeout(saveTimer.current);
+      }
+    };
+  }, [manualData, isDemo]);
 
   const latestByAccount = useMemo(() => {
     const map = new Map<string, Transaction>();
@@ -217,6 +259,7 @@ export function DashboardTabs({ totals, byType, monthlyNet, topCategories, lates
     let running = netWorthNow;
     for (let i = last12.length - 1; i >= 0; i -= 1) {
       const month = last12[i];
+      if (!month) continue;
       series.unshift({ label: month.month, value: running });
       running -= month.net;
     }
@@ -328,6 +371,16 @@ export function DashboardTabs({ totals, byType, monthlyNet, topCategories, lates
       ? Math.min(1, cashBalance / emergencyTarget)
       : 0;
   const tripProgress = tripTarget !== null && tripTarget > 0 ? Math.min(1, tripSaved / tripTarget) : 0;
+
+  const saveMeta = isDemo
+    ? { label: "Demo only", className: "chip muted" }
+    : saveStatus === "saving"
+      ? { label: "Saving...", className: "chip" }
+      : saveStatus === "saved"
+        ? { label: "Saved", className: "chip good" }
+        : saveStatus === "error"
+          ? { label: "Save failed", className: "chip attention" }
+          : { label: "Not saved", className: "chip muted" };
 
   const updateAccount = (id: string, patch: Partial<ManualAccount>) => {
     setManualData((prev) => ({
@@ -916,6 +969,7 @@ export function DashboardTabs({ totals, byType, monthlyNet, topCategories, lates
                         <th>Account</th>
                         <th>Category</th>
                         <th>Amount</th>
+                        <th>Balance</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -928,6 +982,7 @@ export function DashboardTabs({ totals, byType, monthlyNet, topCategories, lates
                           <td className={tx.amount < 0 ? "negative" : "positive"}>
                             {formatCurrency(tx.amount, { sign: true })}
                           </td>
+                          <td>{tx.balance == null ? "—" : formatCurrency(tx.balance)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -935,7 +990,11 @@ export function DashboardTabs({ totals, byType, monthlyNet, topCategories, lates
                 </div>
               </Card>
             </div>
-            <Card title="Account balances" subtitle="Manual until feeds include balances">
+            <Card
+              title="Account balances"
+              subtitle="Manual until feeds include balances"
+              action={<span className={saveMeta.className}>{saveMeta.label}</span>}
+            >
               <div className="stack">
                 {manualData.accounts.length === 0 ? (
                   <p className="muted">No accounts yet. Add one below.</p>
@@ -948,7 +1007,12 @@ export function DashboardTabs({ totals, byType, monthlyNet, topCategories, lates
                           <div className="category-name">{account.name}</div>
                           <div className="muted small">
                             Latest:{" "}
-                            {latestTx ? `${new Date(latestTx.date).toLocaleDateString()} · ${latestTx.merchantName || latestTx.descriptionRaw}` : "—"}
+                            {latestTx
+                              ? `${new Date(latestTx.date).toLocaleDateString()} · ${latestTx.merchantName || latestTx.descriptionRaw}`
+                              : "—"}
+                          </div>
+                          <div className="muted small">
+                            Last known balance: {latestTx?.balance == null ? "—" : formatCurrency(latestTx.balance)}
                           </div>
                         </div>
                         <div className="balance-controls">

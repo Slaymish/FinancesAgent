@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import { pipelineRoutes } from "./routes/pipeline.js";
 import { categoryRoutes } from "./routes/categories.js";
 import { transactionRoutes } from "./routes/transactions.js";
+import { manualDataRoutes } from "./routes/manual-data.js";
 
 export function createApp() {
   const app = Fastify({
@@ -24,6 +25,7 @@ export function createApp() {
   app.register(pipelineRoutes, { prefix: "/api/pipeline" });
   app.register(categoryRoutes, { prefix: "/api/categories" });
   app.register(transactionRoutes, { prefix: "/api/transactions" });
+  app.register(manualDataRoutes, { prefix: "/api/manual-data" });
 
   return app;
 }

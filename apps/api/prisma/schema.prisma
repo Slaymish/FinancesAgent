@@ -155,3 +155,15 @@ model PipelineRun {
   @@index([userId, createdAt])
   @@map("pipeline_runs")
 }
+
+model ManualFinanceProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique @map("user_id")
+  data      Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("manual_finance_profiles")
+}

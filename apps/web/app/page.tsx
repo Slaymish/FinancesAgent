@@ -21,11 +21,43 @@ type SummaryResponse = {
     date: string;
     accountName: string;
     amount: number;
+    balance?: number | null;
     merchantName: string;
     descriptionRaw: string;
     category: string;
     categoryType: string;
   }>;
+};
+
+type ManualDataResponse = {
+  data: ManualData | null;
+};
+
+type ManualAccount = {
+  id: string;
+  name: string;
+  type: string;
+  bucket: string;
+  balance: number | "";
+};
+
+type ManualUpcomingExpense = {
+  id: string;
+  label: string;
+  month: string;
+  amount: number | "";
+};
+
+type ManualGoals = {
+  emergencyTarget: number | "";
+  tripTarget: number | "";
+};
+
+type ManualData = {
+  accounts: ManualAccount[];
+  upcomingExpenses: ManualUpcomingExpense[];
+  savingsTargetRate: number | "";
+  goals: ManualGoals;
 };
 
 export const dynamic = "force-dynamic";
@@ -35,6 +67,7 @@ export default async function HomePage() {
   const isDemo = !session;
 
   let data: SummaryResponse;
+  let manualData: ManualData | null = null;
   if (isDemo) {
     data = demoSummary as SummaryResponse;
   } else {
@@ -50,6 +83,11 @@ export default async function HomePage() {
       );
     }
     data = res.data;
+
+    const manualRes = await fetchUserApi<ManualDataResponse>(session, "/api/manual-data");
+    if (manualRes.ok && manualRes.data) {
+      manualData = manualRes.data.data ?? null;
+    }
   }
 
   const pack = data.metricsPack;
@@ -81,6 +119,8 @@ export default async function HomePage() {
         monthlyNet={monthlyNet}
         topCategories={topCategories}
         latest={latest}
+        isDemo={isDemo}
+        initialManualData={manualData}
       />
     </div>
   );
