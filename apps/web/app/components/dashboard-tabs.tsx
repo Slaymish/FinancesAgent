@@ -1002,101 +1002,103 @@ export function DashboardTabs({
       hint: "Sync + manual",
       content: (
         <Card title="Accounts" action={<span className={saveMeta.className}>{saveMeta.label}</span>}>
-          <div className="account-grid account-grid__header">
-            <span>Account</span>
-            <span>Type</span>
-            <span>Bucket</span>
-            <span>Balance</span>
-            <span />
-          </div>
-          {manualData.accounts.length === 0 ? (
-            <p className="muted">No accounts yet.</p>
-          ) : (
-            manualData.accounts.map((account) => (
-              <div key={account.id} className="account-grid account-grid__row">
-                <input
-                  className="input"
-                  value={account.name}
-                  onChange={(event) => updateAccount(account.id, { name: event.target.value })}
-                />
-                <select
-                  className="input"
-                  value={account.type}
-                  onChange={(event) => updateAccount(account.id, { type: event.target.value as AccountType })}
-                >
-                  {accountTypeOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="input"
-                  value={account.bucket}
-                  onChange={(event) => updateAccount(account.id, { bucket: event.target.value as SavingsBucket })}
-                >
-                  {bucketOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  className="input"
-                  type="number"
-                  step="0.01"
-                  value={account.balance}
-                  onChange={(event) => updateAccount(account.id, { balance: parseAmount(event.target.value) })}
-                />
-                <button type="button" className="button ghost" onClick={() => removeAccount(account.id)}>
-                  Remove
-                </button>
-              </div>
-            ))
-          )}
-          <div className="divider" />
-          <div className="account-grid account-grid__row">
-            <input
-              className="input"
-              placeholder="Account"
-              value={newAccount.name}
-              onChange={(event) => setNewAccount((prev) => ({ ...prev, name: event.target.value }))}
-            />
-            <select
-              className="input"
-              value={newAccount.type}
-              onChange={(event) => setNewAccount((prev) => ({ ...prev, type: event.target.value as AccountType }))}
-            >
-              {accountTypeOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <select
-              className="input"
-              value={newAccount.bucket}
-              onChange={(event) => setNewAccount((prev) => ({ ...prev, bucket: event.target.value as SavingsBucket }))}
-            >
-              {bucketOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <input
-              className="input"
-              type="number"
-              step="0.01"
-              placeholder="0"
-              value={newAccount.balance}
-              onChange={(event) => setNewAccount((prev) => ({ ...prev, balance: parseAmount(event.target.value) }))}
-            />
-            <button type="button" className="button" onClick={addAccount}>
-              Add
-            </button>
-          </div>
-        </Card>
+  <div className="account-grid account-grid__header">
+    <span>Account</span>
+    <span>Type</span>
+    <span>Bucket</span>
+    <span>Balance</span>
+    <span />
+  </div>
+  {manualData.accounts.length === 0 ? (
+    <p className="muted">No accounts yet.</p>
+  ) : (
+    manualData.accounts.map((account) => (
+      <div key={account.id} className="account-grid account-grid__row">
+        <input
+          className="input"
+          value={account.name}
+          onChange={(event) => updateAccount(account.id, { name: event.target.value })}
+          placeholder="Account name"
+        />
+        <select
+          className="input"
+          value={account.type}
+          onChange={(event) => updateAccount(account.id, { type: event.target.value as AccountType })}
+        >
+          {accountTypeOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <select
+          className="input"
+          value={account.bucket}
+          onChange={(event) => updateAccount(account.id, { bucket: event.target.value as SavingsBucket })}
+        >
+          {bucketOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <input
+          className="input"
+          type="number"
+          step="0.01"
+          value={account.balance}
+          onChange={(event) => updateAccount(account.id, { balance: parseAmount(event.target.value) })}
+          placeholder="0.00"
+        />
+        <button type="button" className="button ghost" onClick={() => removeAccount(account.id)}>
+          Remove
+        </button>
+      </div>
+    ))
+  )}
+  <div className="divider" />
+  <div className="account-grid account-grid__row">
+    <input
+      className="input"
+      placeholder="Account name"
+      value={newAccount.name}
+      onChange={(event) => setNewAccount((prev) => ({ ...prev, name: event.target.value }))}
+    />
+    <select
+      className="input"
+      value={newAccount.type}
+      onChange={(event) => setNewAccount((prev) => ({ ...prev, type: event.target.value as AccountType }))}
+    >
+      {accountTypeOptions.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+    <select
+      className="input"
+      value={newAccount.bucket}
+      onChange={(event) => setNewAccount((prev) => ({ ...prev, bucket: event.target.value as SavingsBucket }))}
+    >
+      {bucketOptions.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+    <input
+      className="input"
+      type="number"
+      step="0.01"
+      placeholder="0.00"
+      value={newAccount.balance}
+      onChange={(event) => setNewAccount((prev) => ({ ...prev, balance: parseAmount(event.target.value) }))}
+    />
+    <button type="button" className="button" onClick={addAccount}>
+      Add
+    </button>
+  </div>
+</Card>
       )
     },
     {
