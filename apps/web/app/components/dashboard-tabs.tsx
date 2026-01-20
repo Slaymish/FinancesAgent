@@ -30,10 +30,10 @@ type DashboardTabsProps = {
 };
 
 type ScenarioId = "steady" | "save-5" | "spend-5" | "income-up";
-type AccountType = "unclassified" | "cash" | "savings" | "investments" | "other" | "liability";
-type SavingsBucket = "" | "emergency" | "investments" | "medium-term";
+export type AccountType = "unclassified" | "cash" | "savings" | "investments" | "other" | "liability";
+export type SavingsBucket = "" | "emergency" | "investments" | "medium-term";
 
-type ManualAccount = {
+export type ManualAccount = {
   id: string;
   name: string;
   type: AccountType;
@@ -41,19 +41,19 @@ type ManualAccount = {
   balance: number | "";
 };
 
-type UpcomingExpense = {
+export type UpcomingExpense = {
   id: string;
   label: string;
   month: string;
   amount: number | "";
 };
 
-type ManualGoals = {
+export type ManualGoals = {
   emergencyTarget: number | "";
   tripTarget: number | "";
 };
 
-type ManualData = {
+export type ManualData = {
   accounts: ManualAccount[];
   upcomingExpenses: UpcomingExpense[];
   savingsTargetRate: number | "";

@@ -3,7 +3,7 @@ import { demoSummary } from "./demo-data";
 import { formatCurrency, formatDateTime } from "./lib/format";
 import { getSessionOrNull } from "./lib/session";
 import { fetchUserApi } from "./lib/api-client";
-import { DashboardTabs } from "./components/dashboard-tabs";
+import { DashboardTabs, type ManualData } from "./components/dashboard-tabs";
 
 type SummaryResponse = {
   metricsPack: {
@@ -31,33 +31,6 @@ type SummaryResponse = {
 
 type ManualDataResponse = {
   data: ManualData | null;
-};
-
-type ManualAccount = {
-  id: string;
-  name: string;
-  type: string;
-  bucket: string;
-  balance: number | "";
-};
-
-type ManualUpcomingExpense = {
-  id: string;
-  label: string;
-  month: string;
-  amount: number | "";
-};
-
-type ManualGoals = {
-  emergencyTarget: number | "";
-  tripTarget: number | "";
-};
-
-type ManualData = {
-  accounts: ManualAccount[];
-  upcomingExpenses: ManualUpcomingExpense[];
-  savingsTargetRate: number | "";
-  goals: ManualGoals;
 };
 
 export const dynamic = "force-dynamic";
