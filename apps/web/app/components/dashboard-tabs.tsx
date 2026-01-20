@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Card, Badge } from "./ui";
+import { useEffect, useMemo, useState } from "react";
+import { Badge, Card } from "./ui";
 import { SparkBars, SparkLine } from "./charts";
 import { formatCurrency, formatNumber } from "../lib/format";
 
@@ -27,6 +27,37 @@ type DashboardTabsProps = {
 };
 
 type ScenarioId = "steady" | "save-5" | "spend-5" | "income-up";
+type AccountType = "unclassified" | "cash" | "savings" | "investments" | "other" | "liability";
+type SavingsBucket = "" | "emergency" | "investments" | "medium-term";
+
+type ManualAccount = {
+  id: string;
+  name: string;
+  type: AccountType;
+  bucket: SavingsBucket;
+  balance: number | "";
+};
+
+type UpcomingExpense = {
+  id: string;
+  label: string;
+  month: string;
+  amount: number | "";
+};
+
+type ManualGoals = {
+  emergencyTarget: number | "";
+  tripTarget: number | "";
+};
+
+type ManualData = {
+  accounts: ManualAccount[];
+  upcomingExpenses: UpcomingExpense[];
+  savingsTargetRate: number | "";
+  goals: ManualGoals;
+};
+
+const storageKey = "finance-agent.manualData.v1";
 
 const tabs = [
   { id: "overview", label: "Overview", hint: "10-second read" },
@@ -36,10 +67,45 @@ const tabs = [
   { id: "history", label: "History", hint: "Power user" }
 ] as const;
 
+const emptyManualData: ManualData = {
+  accounts: [],
+  upcomingExpenses: [],
+  savingsTargetRate: "",
+  goals: { emergencyTarget: "", tripTarget: "" }
+};
+
+const accountTypeOptions: Array<{ value: AccountType; label: string }> = [
+  { value: "unclassified", label: "Unclassified" },
+  { value: "cash", label: "Cash" },
+  { value: "savings", label: "Savings" },
+  { value: "investments", label: "Investments" },
+  { value: "other", label: "Other assets" },
+  { value: "liability", label: "Liability" }
+];
+
+const bucketOptions: Array<{ value: SavingsBucket; label: string }> = [
+  { value: "", label: "No bucket" },
+  { value: "emergency", label: "Emergency" },
+  { value: "investments", label: "Investments" },
+  { value: "medium-term", label: "Medium-term" }
+];
+
+function createId() {
+  return Math.random().toString(36).slice(2, 10);
+}
+
 function formatMonthLabel(value: string) {
+  if (!value) return "—";
   const date = new Date(`${value}-01T00:00:00`);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString(undefined, { month: "short" });
+}
+
+function formatMonthLong(value: string) {
+  if (!value) return "—";
+  const date = new Date(`${value}-01T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, { month: "short", year: "numeric" });
 }
 
 function addMonths(value: string, offset: number) {
@@ -54,14 +120,16 @@ function average(values: number[]) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-function buildCategoryTrend(amount: number, months: MonthlyNet[]) {
-  if (months.length === 0) return [];
-  const base = Math.abs(amount) / months.length;
-  return months.map((month, index) => {
-    const wave = 0.12 * Math.sin(index * 1.4);
-    const drift = index % 2 === 0 ? 0.04 : -0.03;
-    return { label: month.month, value: Math.max(0, base * (1 + wave + drift)) };
-  });
+function parseAmount(value: string) {
+  if (!value) return "";
+  const parsed = Number(value);
+  if (Number.isNaN(parsed)) return "";
+  return parsed;
+}
+
+function formatMaybeCurrency(value: number | null) {
+  if (value === null) return "—";
+  return formatCurrency(value);
 }
 
 export function DashboardTabs({ totals, byType, monthlyNet, topCategories, latest }: DashboardTabsProps) {
@@ -69,33 +137,105 @@ export function DashboardTabs({ totals, byType, monthlyNet, topCategories, lates
   const [selectedCategory, setSelectedCategory] = useState(topCategories[0]?.category ?? "");
   const [showTransactions, setShowTransactions] = useState(false);
   const [scenario, setScenario] = useState<ScenarioId>("steady");
+  const [manualData, setManualData] = useState<ManualData>(emptyManualData);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [newAccount, setNewAccount] = useState<ManualAccount>({
+    id: "",
+    name: "",
+    type: "unclassified",
+    bucket: "",
+    balance: ""
+  });
+  const [newExpense, setNewExpense] = useState<UpcomingExpense>({ id: "", label: "", month: "", amount: "" });
 
   const last12 = useMemo(() => monthlyNet.slice(-12), [monthlyNet]);
   const last6 = useMemo(() => monthlyNet.slice(-6), [monthlyNet]);
   const last3 = useMemo(() => monthlyNet.slice(-3), [monthlyNet]);
 
-  const startNetWorth = Math.max(25000, Math.round(totals.income30 * 8));
-  const netWorthSeries = useMemo(() => {
-    let running = startNetWorth;
-    return last12.map((month) => {
-      running += month.net;
-      return { label: month.month, value: running };
-    });
-  }, [last12, startNetWorth]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = window.localStorage.getItem(storageKey);
+    let nextData = emptyManualData;
+    if (raw) {
+      try {
+        nextData = { ...emptyManualData, ...JSON.parse(raw) };
+      } catch {
+        nextData = emptyManualData;
+      }
+    }
 
-  const netWorthNow = netWorthSeries[netWorthSeries.length - 1]?.value ?? startNetWorth;
-  const avgExpense = Math.max(1, average(last3.map((month) => month.expense)));
-  const cashBalance = Math.max(3000, netWorthNow * 0.22);
-  const runwayMonths = cashBalance / avgExpense;
-  const runwayTone = runwayMonths >= 6 ? "positive" : runwayMonths >= 3 ? "warn" : "negative";
+    const latestAccounts = Array.from(
+      new Set(latest.map((tx) => tx.accountName).filter((name) => name && name.trim()))
+    );
+    const existingByName = new Map(nextData.accounts.map((account) => [account.name, account]));
+    const mergedAccounts = [...nextData.accounts];
+    latestAccounts.forEach((name) => {
+      if (!existingByName.has(name)) {
+        mergedAccounts.push({
+          id: createId(),
+          name,
+          type: "unclassified",
+          bucket: "",
+          balance: ""
+        });
+      }
+    });
+
+    setManualData({ ...nextData, accounts: mergedAccounts });
+    setHasLoaded(true);
+  }, [latest]);
+
+  useEffect(() => {
+    if (!hasLoaded || typeof window === "undefined") return;
+    window.localStorage.setItem(storageKey, JSON.stringify(manualData));
+  }, [manualData, hasLoaded]);
+
+  const latestByAccount = useMemo(() => {
+    const map = new Map<string, Transaction>();
+    latest.forEach((tx) => {
+      if (!tx.accountName) return;
+      const existing = map.get(tx.accountName);
+      if (!existing || new Date(tx.date).getTime() > new Date(existing.date).getTime()) {
+        map.set(tx.accountName, tx);
+      }
+    });
+    return map;
+  }, [latest]);
+
+  const accountsWithBalance = manualData.accounts.filter((account) => typeof account.balance === "number");
+  const hasBalances = accountsWithBalance.length > 0;
+  const cashBalance = accountsWithBalance
+    .filter((account) => account.type === "cash" || account.type === "savings")
+    .reduce((sum, account) => sum + (account.balance as number), 0);
+  const netWorthNow = hasBalances
+    ? accountsWithBalance.reduce((sum, account) => sum + (account.balance as number), 0)
+    : null;
+
+  const netWorthSeries = useMemo(() => {
+    if (!hasBalances || last12.length === 0 || netWorthNow === null) return [];
+    const series: Array<{ label: string; value: number }> = [];
+    let running = netWorthNow;
+    for (let i = last12.length - 1; i >= 0; i -= 1) {
+      const month = last12[i];
+      series.unshift({ label: month.month, value: running });
+      running -= month.net;
+    }
+    return series;
+  }, [hasBalances, last12, netWorthNow]);
+
+  const avgExpense = average(last3.map((month) => month.expense));
+  const runwayMonths = cashBalance > 0 && avgExpense > 0 ? cashBalance / avgExpense : null;
+  const runwayTone =
+    runwayMonths === null ? "neutral" : runwayMonths >= 6 ? "positive" : runwayMonths >= 3 ? "warn" : "negative";
 
   const rollingIncome = last3.reduce((sum, item) => sum + item.income, 0);
   const rollingSavings = last3.reduce((sum, item) => sum + item.net, 0);
   const savingsRate = rollingIncome > 0 ? (rollingSavings / rollingIncome) * 100 : 0;
 
-  const savingsTarget = totals.income30 * 0.15;
-  const safeToSpend = totals.income30 - totals.expense30 - savingsTarget;
-  const safeTone = safeToSpend >= 0 ? "positive" : "negative";
+  const savingsTargetRate = typeof manualData.savingsTargetRate === "number" ? manualData.savingsTargetRate : null;
+  const savingsTarget = savingsTargetRate !== null ? totals.income30 * (savingsTargetRate / 100) : null;
+  const safeToSpend = savingsTarget !== null ? totals.income30 - totals.expense30 - savingsTarget : null;
+  const safeTone = safeToSpend !== null && safeToSpend >= 0 ? "positive" : "negative";
 
   const incomeVsSpend = last6.map((item) => ({
     label: formatMonthLabel(item.month),
@@ -113,28 +253,52 @@ export function DashboardTabs({ totals, byType, monthlyNet, topCategories, lates
   const fixedPct = (fixedSpend / splitTotal) * 100;
 
   const selectedCategoryData = topCategories.find((item) => item.category === selectedCategory) ?? categoryList[0];
-  const categoryTrend = selectedCategoryData ? buildCategoryTrend(selectedCategoryData.amount, last6) : [];
 
-  const savingsPool = Math.max(0, byType.saving ?? 0, totals.net30 * 0.2);
-  const savingsAllocation = [
-    { label: "Emergency", amount: savingsPool * 0.45 },
-    { label: "Investments", amount: savingsPool * 0.4 },
-    { label: "Medium-term", amount: savingsPool * 0.15 }
+  const allocationTotals = manualData.accounts.reduce(
+    (acc, account) => {
+      if (typeof account.balance !== "number") return acc;
+      if (!account.bucket) return acc;
+      acc[account.bucket] += account.balance;
+      return acc;
+    },
+    { emergency: 0, investments: 0, "medium-term": 0 }
+  );
+  const allocationList = [
+    { label: "Emergency", amount: allocationTotals.emergency },
+    { label: "Investments", amount: allocationTotals.investments },
+    { label: "Medium-term", amount: allocationTotals["medium-term"] }
   ];
-  const savingsMax = Math.max(1, ...savingsAllocation.map((item) => item.amount));
+  const allocationMax = Math.max(1, ...allocationList.map((item) => Math.abs(item.amount)));
+  const hasAllocation = allocationList.some((item) => item.amount !== 0);
 
-  const netWorthAssets = Math.max(netWorthNow, 0);
+  const breakdownTotals = manualData.accounts.reduce(
+    (acc, account) => {
+      if (typeof account.balance !== "number") return acc;
+      if (account.type === "cash" || account.type === "savings") acc.cash += account.balance;
+      else if (account.type === "investments") acc.investments += account.balance;
+      else if (account.type === "other") acc.other += account.balance;
+      else if (account.type === "liability") acc.liabilities += account.balance;
+      else acc.unclassified += account.balance;
+      return acc;
+    },
+    { cash: 0, investments: 0, other: 0, liabilities: 0, unclassified: 0 }
+  );
   const netWorthBreakdown = [
-    { label: "Cash", amount: netWorthAssets * 0.28 },
-    { label: "Investments", amount: netWorthAssets * 0.52 },
-    { label: "Other assets", amount: netWorthAssets * 0.2 },
-    { label: "Liabilities", amount: -netWorthAssets * 0.18 }
+    { label: "Cash", amount: breakdownTotals.cash },
+    { label: "Investments", amount: breakdownTotals.investments },
+    { label: "Other assets", amount: breakdownTotals.other },
+    { label: "Liabilities", amount: breakdownTotals.liabilities }
   ];
+  if (breakdownTotals.unclassified !== 0) {
+    netWorthBreakdown.push({ label: "Unclassified", amount: breakdownTotals.unclassified });
+  }
 
-  const netWorthChange = netWorthSeries.length >= 2 ? netWorthNow - netWorthSeries[0].value : 0;
-  const avgMonthlySavings = average(last6.map((item) => item.net));
-  const contributionTotal = avgMonthlySavings * last6.length;
-  const growthTotal = netWorthChange - contributionTotal;
+  const firstNetWorth = netWorthSeries[0];
+  const lastNetWorth = netWorthSeries[netWorthSeries.length - 1];
+  const netWorthChange =
+    firstNetWorth && lastNetWorth ? lastNetWorth.value - firstNetWorth.value : null;
+  const contributionTotal = last12.reduce((sum, item) => sum + item.net, 0);
+  const growthTotal = netWorthChange !== null ? netWorthChange - contributionTotal : null;
 
   const baseIncome = average(last6.map((item) => item.income));
   const baseExpense = average(last6.map((item) => item.expense));
@@ -143,38 +307,69 @@ export function DashboardTabs({ totals, byType, monthlyNet, topCategories, lates
     scenario === "spend-5" ? baseExpense * 1.05 : scenario === "save-5" ? baseExpense * 0.95 : baseExpense;
   const scenarioNet = scenarioIncome - scenarioExpense;
 
-  const projectionBaseMonth = last6[last6.length - 1]?.month ?? "2024-01";
-  const projectionSeries = Array.from({ length: 6 }, (_, index) => {
-    const label = addMonths(projectionBaseMonth, index + 1);
-    const projectedValue = netWorthNow + scenarioNet * (index + 1);
-    return { label, value: projectedValue };
-  });
-  const projectedNetWorth = projectionSeries[projectionSeries.length - 1]?.value ?? netWorthNow;
-  const projectedCash = cashBalance + scenarioNet * 2;
+  const projectionBaseMonth = last6[last6.length - 1]?.month ?? "";
+  const projectionSeries =
+    netWorthNow !== null && projectionBaseMonth
+      ? Array.from({ length: 6 }, (_, index) => {
+          const label = addMonths(projectionBaseMonth, index + 1);
+          const projectedValue = netWorthNow + scenarioNet * (index + 1);
+          return { label, value: projectedValue };
+        })
+      : [];
+  const projectedNetWorth = projectionSeries[projectionSeries.length - 1]?.value ?? null;
+  const projectedCash = cashBalance > 0 ? cashBalance + scenarioNet * 2 : null;
 
-  const upcomingExpenses = [
-    {
-      label: "Rent",
-      date: "Next month",
-      amount: baseExpense * 0.35
-    },
-    {
-      label: "Insurance",
-      date: "In 2 months",
-      amount: baseExpense * 0.12
-    },
-    {
-      label: "Trip fund",
-      date: "In 4 months",
-      amount: baseExpense * 0.22
-    }
-  ];
+  const emergencyTarget =
+    typeof manualData.goals.emergencyTarget === "number" ? manualData.goals.emergencyTarget : null;
+  const tripTarget = typeof manualData.goals.tripTarget === "number" ? manualData.goals.tripTarget : null;
+  const tripSaved = allocationTotals["medium-term"];
+  const emergencyProgress =
+    emergencyTarget !== null && emergencyTarget > 0 && cashBalance > 0
+      ? Math.min(1, cashBalance / emergencyTarget)
+      : 0;
+  const tripProgress = tripTarget !== null && tripTarget > 0 ? Math.min(1, tripSaved / tripTarget) : 0;
 
-  const emergencyTarget = baseExpense * 6;
-  const emergencyProgress = emergencyTarget > 0 ? Math.min(1, cashBalance / emergencyTarget) : 0;
-  const tripTarget = 3200;
-  const tripSaved = savingsPool * 0.3;
-  const tripProgress = tripTarget > 0 ? Math.min(1, tripSaved / tripTarget) : 0;
+  const updateAccount = (id: string, patch: Partial<ManualAccount>) => {
+    setManualData((prev) => ({
+      ...prev,
+      accounts: prev.accounts.map((account) => (account.id === id ? { ...account, ...patch } : account))
+    }));
+  };
+
+  const removeAccount = (id: string) => {
+    setManualData((prev) => ({ ...prev, accounts: prev.accounts.filter((account) => account.id !== id) }));
+  };
+
+  const addAccount = () => {
+    if (!newAccount.name.trim()) return;
+    setManualData((prev) => ({
+      ...prev,
+      accounts: [
+        ...prev.accounts,
+        { ...newAccount, id: createId(), name: newAccount.name.trim(), balance: newAccount.balance }
+      ]
+    }));
+    setNewAccount({ id: "", name: "", type: "unclassified", bucket: "", balance: "" });
+  };
+
+  const addExpense = () => {
+    if (!newExpense.label.trim() || !newExpense.month) return;
+    setManualData((prev) => ({
+      ...prev,
+      upcomingExpenses: [
+        ...prev.upcomingExpenses,
+        { ...newExpense, id: createId(), label: newExpense.label.trim(), amount: newExpense.amount }
+      ]
+    }));
+    setNewExpense({ id: "", label: "", month: "", amount: "" });
+  };
+
+  const removeExpense = (id: string) => {
+    setManualData((prev) => ({
+      ...prev,
+      upcomingExpenses: prev.upcomingExpenses.filter((expense) => expense.id !== id)
+    }));
+  };
 
   return (
     <div className="tabs">
@@ -199,24 +394,42 @@ export function DashboardTabs({ totals, byType, monthlyNet, topCategories, lates
         <div id="overview-panel" role="tabpanel" className="tab-panel">
           <div className="dashboard-grid cols-3">
             <div className="span-2">
-              <Card title="Net worth over time" subtitle="Last 12 months">
-                <SparkLine data={netWorthSeries.map((item) => ({ value: item.value }))} />
-                <div className="chart-legend">
-                  {netWorthSeries.slice(-3).map((item) => (
-                    <div key={item.label} className="pill muted">
-                      <span className="section-title">{item.label}</span>
-                      <span>{formatCurrency(item.value)}</span>
+              <Card title="Net worth over time" subtitle="Based on your balances + cashflow">
+                {netWorthSeries.length > 0 ? (
+                  <>
+                    <SparkLine data={netWorthSeries.map((item) => ({ value: item.value }))} />
+                    <div className="chart-legend">
+                      {netWorthSeries.slice(-3).map((item) => (
+                        <div key={item.label} className="pill muted">
+                          <span className="section-title">{item.label}</span>
+                          <span>{formatCurrency(item.value)}</span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </>
+                ) : (
+                  <div className="callout">
+                    <strong>Add balances to unlock net worth</strong>
+                    <p className="muted small">Enter account balances in the History tab to avoid placeholders.</p>
+                  </div>
+                )}
               </Card>
             </div>
             <Card title="Cash runway" subtitle="Estimated months of buffer">
-              <div className={`big-number ${runwayTone}`}>
-                {formatNumber(runwayMonths, 1)}
-                <span className="big-number__unit">months</span>
-              </div>
-              <p className="muted small">Based on recent monthly outflows.</p>
+              {runwayMonths === null ? (
+                <div className="callout">
+                  <strong>Cash balances missing</strong>
+                  <p className="muted small">Add cash or savings balances to calculate runway.</p>
+                </div>
+              ) : (
+                <>
+                  <div className={`big-number ${runwayTone}`}>
+                    {formatNumber(runwayMonths, 1)}
+                    <span className="big-number__unit">months</span>
+                  </div>
+                  <p className="muted small">Based on recent monthly outflows.</p>
+                </>
+              )}
             </Card>
             <Card title="Savings rate" subtitle="Rolling 3-month">
               <div className="big-number neutral">
@@ -225,12 +438,35 @@ export function DashboardTabs({ totals, byType, monthlyNet, topCategories, lates
               </div>
               <p className="muted small">Net income retained after expenses.</p>
             </Card>
-            <Card title="Safe to spend this month" subtitle="After baseline savings">
-              <div className={`big-number ${safeTone}`}>
-                {formatCurrency(safeToSpend)}
-                <span className="big-number__unit">buffer</span>
+            <Card title="Safe to spend this month" subtitle="After your savings target">
+              {safeToSpend === null ? (
+                <div className="callout">
+                  <strong>Set a savings target</strong>
+                  <p className="muted small">Add a target percentage to unlock safe-to-spend.</p>
+                </div>
+              ) : (
+                <>
+                  <div className={`big-number ${safeTone}`}>
+                    {formatCurrency(safeToSpend)}
+                    <span className="big-number__unit">buffer</span>
+                  </div>
+                  <Badge tone={safeTone}>{safeToSpend >= 0 ? "On track" : "Tight month"}</Badge>
+                </>
+              )}
+              <div className="field compact">
+                <label htmlFor="savings-target">Savings target (%)</label>
+                <input
+                  id="savings-target"
+                  className="input"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={manualData.savingsTargetRate}
+                  onChange={(event) =>
+                    setManualData((prev) => ({ ...prev, savingsTargetRate: parseAmount(event.target.value) }))
+                  }
+                />
               </div>
-              <Badge tone={safeTone}>{safeToSpend >= 0 ? "On track" : "Tight month"}</Badge>
             </Card>
             <div className="span-2">
               <Card title="Income vs spending" subtitle="Last 6 months">
@@ -278,7 +514,7 @@ export function DashboardTabs({ totals, byType, monthlyNet, topCategories, lates
                         <span className="muted small">{formatCurrency(-item.amount)}</span>
                       </div>
                       <div className="bar-list__track">
-                          <div
+                        <div
                           className="bar-list__bar"
                           style={{
                             width: `${(Math.abs(item.amount) / categoryMax) * 100}%`
@@ -307,7 +543,7 @@ export function DashboardTabs({ totals, byType, monthlyNet, topCategories, lates
               </div>
               <p className="muted small">Essentials vs wants to show flexibility.</p>
             </Card>
-            <Card title="Category drill-down" subtitle="Select a category">
+            <Card title="Category drill-down" subtitle="Monthly trend when available">
               <div className="chip-row">
                 {categoryList.map((item) => (
                   <button
@@ -321,11 +557,10 @@ export function DashboardTabs({ totals, byType, monthlyNet, topCategories, lates
                 ))}
               </div>
               {selectedCategoryData ? (
-                <SparkBars
-                  data={categoryTrend.map((item) => ({ label: item.label, value: item.value }))}
-                  height={110}
-                  renderLabel={(value) => formatCurrency(value)}
-                />
+                <div className="callout">
+                  <strong>Category trend data not available yet</strong>
+                  <p className="muted small">Connect monthly category history to unlock this view.</p>
+                </div>
               ) : (
                 <p className="muted">Pick a category to see the monthly trend.</p>
               )}
@@ -390,72 +625,95 @@ export function DashboardTabs({ totals, byType, monthlyNet, topCategories, lates
                 ))}
               </div>
             </Card>
-            <Card title="Savings allocation" subtitle="Where the buffer is going">
-              <div className="bar-list">
-                {savingsAllocation.map((item) => (
-                  <div key={item.label} className="bar-list__row">
-                    <div className="bar-list__label">
-                      <span>{item.label}</span>
-                      <span className="muted small">{formatCurrency(item.amount)}</span>
+            <Card title="Savings allocation" subtitle="Manual buckets">
+              {hasAllocation ? (
+                <div className="bar-list">
+                  {allocationList.map((item) => (
+                    <div key={item.label} className="bar-list__row">
+                      <div className="bar-list__label">
+                        <span>{item.label}</span>
+                        <span className="muted small">{formatCurrency(item.amount)}</span>
+                      </div>
+                      <div className="bar-list__track">
+                        <div
+                          className="bar-list__bar"
+                          style={{
+                            width: `${(Math.abs(item.amount) / allocationMax) * 100}%`
+                          }}
+                        />
+                      </div>
                     </div>
-                    <div className="bar-list__track">
-                      <div
-                        className="bar-list__bar"
-                        style={{
-                          width: `${(item.amount / savingsMax) * 100}%`
-                        }}
-                      />
+                  ))}
+                </div>
+              ) : (
+                <div className="callout">
+                  <strong>No savings buckets yet</strong>
+                  <p className="muted small">Assign buckets to savings accounts in History.</p>
+                </div>
+              )}
+            </Card>
+            <Card title="Net worth breakdown" subtitle="Based on account balances">
+              {hasBalances ? (
+                <div className="bar-list">
+                  {netWorthBreakdown.map((item) => (
+                    <div key={item.label} className="bar-list__row">
+                      <div className="bar-list__label">
+                        <span>{item.label}</span>
+                        <span className="muted small">{formatCurrency(item.amount)}</span>
+                      </div>
+                      <div className="bar-list__track">
+                        <div
+                          className={`bar-list__bar${item.amount < 0 ? " negative" : ""}`}
+                          style={{
+                            width: `${(Math.abs(item.amount) / Math.max(1, Math.abs(netWorthNow ?? 0))) * 100}%`
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="callout">
+                  <strong>Add balances to see structure</strong>
+                  <p className="muted small">Balances are manual until account data is available.</p>
+                </div>
+              )}
+            </Card>
+            <Card title="Contributions vs growth" subtitle="Derived from balances">
+              {netWorthChange === null ? (
+                <div className="callout">
+                  <strong>Need balances for growth</strong>
+                  <p className="muted small">Add account balances to compare contributions vs growth.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="split-meter">
+                    <div
+                      className="split-meter__segment fixed"
+                      style={{
+                        width: `${(Math.abs(contributionTotal) / Math.max(1, Math.abs(contributionTotal) + Math.abs(growthTotal ?? 0))) * 100}%`
+                      }}
+                    />
+                    <div
+                      className="split-meter__segment discretionary"
+                      style={{
+                        width: `${(Math.abs(growthTotal ?? 0) / Math.max(1, Math.abs(contributionTotal) + Math.abs(growthTotal ?? 0))) * 100}%`
+                      }}
+                    />
+                  </div>
+                  <div className="split-labels">
+                    <div>
+                      <div className="section-title">Contributions</div>
+                      <div>{formatCurrency(contributionTotal)}</div>
+                    </div>
+                    <div>
+                      <div className="section-title">Growth</div>
+                      <div>{formatMaybeCurrency(growthTotal)}</div>
                     </div>
                   </div>
-                ))}
-              </div>
-            </Card>
-            <Card title="Net worth breakdown" subtitle="Structure, not perfection">
-              <div className="bar-list">
-                {netWorthBreakdown.map((item) => (
-                  <div key={item.label} className="bar-list__row">
-                    <div className="bar-list__label">
-                      <span>{item.label}</span>
-                      <span className="muted small">{formatCurrency(item.amount)}</span>
-                    </div>
-                    <div className="bar-list__track">
-                      <div
-                        className={`bar-list__bar${item.amount < 0 ? " negative" : ""}`}
-                        style={{
-                          width: `${(Math.abs(item.amount) / Math.max(1, netWorthAssets)) * 100}%`
-                        }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-            <Card title="Contributions vs growth" subtitle="Investing momentum">
-              <div className="split-meter">
-                <div
-                  className="split-meter__segment fixed"
-                  style={{
-                    width: `${(Math.abs(contributionTotal) / Math.max(1, Math.abs(contributionTotal) + Math.abs(growthTotal))) * 100}%`
-                  }}
-                />
-                <div
-                  className="split-meter__segment discretionary"
-                  style={{
-                    width: `${(Math.abs(growthTotal) / Math.max(1, Math.abs(contributionTotal) + Math.abs(growthTotal))) * 100}%`
-                  }}
-                />
-              </div>
-              <div className="split-labels">
-                <div>
-                  <div className="section-title">Contributions</div>
-                  <div>{formatCurrency(contributionTotal)}</div>
-                </div>
-                <div>
-                  <div className="section-title">Growth</div>
-                  <div>{formatCurrency(growthTotal)}</div>
-                </div>
-              </div>
-              <p className="muted small">Keeps the focus on compounding, not guilt.</p>
+                  <p className="muted small">Growth reflects the gap between balances and net cashflow.</p>
+                </>
+              )}
             </Card>
           </div>
         </div>
@@ -465,30 +723,85 @@ export function DashboardTabs({ totals, byType, monthlyNet, topCategories, lates
         <div id="planning-panel" role="tabpanel" className="tab-panel">
           <div className="dashboard-grid cols-2">
             <Card title="Upcoming known expenses" subtitle="Next 3-6 months">
-              <div className="change-list">
-                {upcomingExpenses.map((item) => (
-                  <div key={item.label} className="change-item">
-                    <div className="glance-title-row">
-                      <span className="glance-title">{item.label}</span>
-                      <Badge tone="neutral">{item.date}</Badge>
+              <div className="stack">
+                {manualData.upcomingExpenses.length === 0 ? (
+                  <p className="muted">Add upcoming expenses to reduce surprises.</p>
+                ) : (
+                  manualData.upcomingExpenses.map((item) => (
+                    <div key={item.id} className="change-item">
+                      <div className="glance-title-row">
+                        <span className="glance-title">{item.label}</span>
+                        <Badge tone="neutral">{formatMonthLong(item.month)}</Badge>
+                      </div>
+                      <div className="row-between">
+                        <strong>{typeof item.amount === "number" ? formatCurrency(item.amount) : "—"}</strong>
+                        <button type="button" className="button ghost" onClick={() => removeExpense(item.id)}>
+                          Remove
+                        </button>
+                      </div>
                     </div>
-                    <strong>{formatCurrency(item.amount)}</strong>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
+              <div className="divider" />
+              <div className="form-grid">
+                <div className="field">
+                  <label htmlFor="expense-label">Expense</label>
+                  <input
+                    id="expense-label"
+                    className="input"
+                    value={newExpense.label}
+                    onChange={(event) => setNewExpense((prev) => ({ ...prev, label: event.target.value }))}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="expense-month">Month</label>
+                  <input
+                    id="expense-month"
+                    className="input"
+                    type="month"
+                    value={newExpense.month}
+                    onChange={(event) => setNewExpense((prev) => ({ ...prev, month: event.target.value }))}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="expense-amount">Amount</label>
+                  <input
+                    id="expense-amount"
+                    className="input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={newExpense.amount}
+                    onChange={(event) => setNewExpense((prev) => ({ ...prev, amount: parseAmount(event.target.value) }))}
+                  />
+                </div>
+              </div>
+              <button type="button" className="button" onClick={addExpense}>
+                Add expense
+              </button>
             </Card>
             <Card title="Projection if nothing changes" subtitle="Net worth + cash outlook">
-              <SparkLine data={projectionSeries.map((item) => ({ value: item.value }))} />
-              <div className="chart-legend">
-                <div className="pill muted">
-                  <span className="section-title">Net worth (6 months)</span>
-                  <span>{formatCurrency(projectedNetWorth)}</span>
+              {projectionSeries.length > 0 ? (
+                <>
+                  <SparkLine data={projectionSeries.map((item) => ({ value: item.value }))} />
+                  <div className="chart-legend">
+                    <div className="pill muted">
+                      <span className="section-title">Net worth (6 months)</span>
+                      <span>{formatMaybeCurrency(projectedNetWorth)}</span>
+                    </div>
+                    <div className="pill muted">
+                      <span className="section-title">Cash (2 months)</span>
+                      <span>{formatMaybeCurrency(projectedCash)}</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="callout">
+                  <strong>Add balances to project</strong>
+                  <p className="muted small">Projections need current account balances.</p>
                 </div>
-                <div className="pill muted">
-                  <span className="section-title">Cash (2 months)</span>
-                  <span>{formatCurrency(projectedCash)}</span>
-                </div>
-              </div>
+              )}
             </Card>
             <Card title="Scenario toggles" subtitle="Optional adjustments">
               <div className="chip-row">
@@ -510,13 +823,13 @@ export function DashboardTabs({ totals, byType, monthlyNet, topCategories, lates
               </div>
               <p className="muted small">Lightweight what-if scenarios to reduce anxiety.</p>
             </Card>
-            <Card title="Goal trackers" subtitle="Permission to relax">
+            <Card title="Goal trackers" subtitle="Manual targets">
               <div className="goal-stack">
                 <div>
                   <div className="goal-row">
                     <span>Emergency fund</span>
                     <span className="muted small">
-                      {formatCurrency(cashBalance)} / {formatCurrency(emergencyTarget)}
+                      {formatMaybeCurrency(cashBalance || null)} / {formatMaybeCurrency(emergencyTarget)}
                     </span>
                   </div>
                   <div className="progress">
@@ -527,12 +840,48 @@ export function DashboardTabs({ totals, byType, monthlyNet, topCategories, lates
                   <div className="goal-row">
                     <span>Trip fund</span>
                     <span className="muted small">
-                      {formatCurrency(tripSaved)} / {formatCurrency(tripTarget)}
+                      {formatMaybeCurrency(tripSaved)} / {formatMaybeCurrency(tripTarget)}
                     </span>
                   </div>
                   <div className="progress">
                     <div className="progress__bar alt" style={{ width: `${tripProgress * 100}%` }} />
                   </div>
+                </div>
+              </div>
+              <div className="form-grid">
+                <div className="field">
+                  <label htmlFor="goal-emergency">Emergency target</label>
+                  <input
+                    id="goal-emergency"
+                    className="input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={manualData.goals.emergencyTarget}
+                    onChange={(event) =>
+                      setManualData((prev) => ({
+                        ...prev,
+                        goals: { ...prev.goals, emergencyTarget: parseAmount(event.target.value) }
+                      }))
+                    }
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="goal-trip">Trip target</label>
+                  <input
+                    id="goal-trip"
+                    className="input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={manualData.goals.tripTarget}
+                    onChange={(event) =>
+                      setManualData((prev) => ({
+                        ...prev,
+                        goals: { ...prev.goals, tripTarget: parseAmount(event.target.value) }
+                      }))
+                    }
+                  />
                 </div>
               </div>
             </Card>
@@ -586,11 +935,127 @@ export function DashboardTabs({ totals, byType, monthlyNet, topCategories, lates
                 </div>
               </Card>
             </div>
-            <Card title="Data sources & sync status" subtitle="Trust layer">
+            <Card title="Account balances" subtitle="Manual until feeds include balances">
               <div className="stack">
-                <div className="pill muted">Bank feed · Healthy · 2 hours ago</div>
-                <div className="pill muted">Card feed · Healthy · Yesterday</div>
-                <div className="pill muted">Manual uploads · No issues</div>
+                {manualData.accounts.length === 0 ? (
+                  <p className="muted">No accounts yet. Add one below.</p>
+                ) : (
+                  manualData.accounts.map((account) => {
+                    const latestTx = latestByAccount.get(account.name);
+                    return (
+                      <div key={account.id} className="balance-row">
+                        <div>
+                          <div className="category-name">{account.name}</div>
+                          <div className="muted small">
+                            Latest:{" "}
+                            {latestTx ? `${new Date(latestTx.date).toLocaleDateString()} · ${latestTx.merchantName || latestTx.descriptionRaw}` : "—"}
+                          </div>
+                        </div>
+                        <div className="balance-controls">
+                          <select
+                            className="input"
+                            value={account.type}
+                            onChange={(event) => updateAccount(account.id, { type: event.target.value as AccountType })}
+                          >
+                            {accountTypeOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            className="input"
+                            value={account.bucket}
+                            onChange={(event) =>
+                              updateAccount(account.id, { bucket: event.target.value as SavingsBucket })
+                            }
+                          >
+                            {bucketOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            className="input"
+                            type="number"
+                            step="0.01"
+                            placeholder="Balance"
+                            value={account.balance}
+                            onChange={(event) => updateAccount(account.id, { balance: parseAmount(event.target.value) })}
+                          />
+                          <button type="button" className="button ghost" onClick={() => removeAccount(account.id)}>
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+              <div className="divider" />
+              <div className="form-grid">
+                <div className="field">
+                  <label htmlFor="account-name">Account</label>
+                  <input
+                    id="account-name"
+                    className="input"
+                    value={newAccount.name}
+                    onChange={(event) => setNewAccount((prev) => ({ ...prev, name: event.target.value }))}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="account-type">Type</label>
+                  <select
+                    id="account-type"
+                    className="input"
+                    value={newAccount.type}
+                    onChange={(event) => setNewAccount((prev) => ({ ...prev, type: event.target.value as AccountType }))}
+                  >
+                    {accountTypeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="account-bucket">Bucket</label>
+                  <select
+                    id="account-bucket"
+                    className="input"
+                    value={newAccount.bucket}
+                    onChange={(event) =>
+                      setNewAccount((prev) => ({ ...prev, bucket: event.target.value as SavingsBucket }))
+                    }
+                  >
+                    {bucketOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="account-balance">Balance</label>
+                  <input
+                    id="account-balance"
+                    className="input"
+                    type="number"
+                    step="0.01"
+                    value={newAccount.balance}
+                    onChange={(event) => setNewAccount((prev) => ({ ...prev, balance: parseAmount(event.target.value) }))}
+                  />
+                </div>
+              </div>
+              <button type="button" className="button" onClick={addAccount}>
+                Add account
+              </button>
+            </Card>
+            <Card title="Data sources & sync status" subtitle="Trust layer">
+              <div className="callout">
+                <strong>Sync status not available yet</strong>
+                <p className="muted small">Feed health will appear once providers share balance metadata.</p>
               </div>
             </Card>
             <Card title="Corrections & adjustments" subtitle="Clean up the edges">

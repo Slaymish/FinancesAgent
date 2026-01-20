@@ -59,15 +59,20 @@ export default async function HomePage() {
   const topCategories = pack?.trends?.categorySpend30 ?? [];
   const latest = data.latestTransactions ?? [];
 
+  const headerMeta = [
+    { label: "Snapshot", value: formatDateTime(pack?.generatedAt) },
+    { label: "Last 30 days", value: formatCurrency(totals.net30, { sign: true }) }
+  ];
+  if (isDemo) {
+    headerMeta.push({ label: "Mode", value: "Demo data" });
+  }
+
   return (
     <div className="section">
       <PageHeader
         title="Overview"
-        description="10-second health check with deeper diagnostics when needed."
-        meta={[
-          { label: "Snapshot", value: formatDateTime(pack?.generatedAt) },
-          { label: "Last 30 days", value: formatCurrency(totals.net30, { sign: true }) }
-        ]}
+        description={isDemo ? "Demo data preview. Sign in to see your real transactions." : "10-second health check with deeper diagnostics when needed."}
+        meta={headerMeta}
       />
 
       <DashboardTabs

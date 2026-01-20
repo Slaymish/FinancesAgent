@@ -718,6 +718,17 @@ h4 {
   color: var(--text-muted);
 }
 
+.field.compact {
+  margin-top: 12px;
+}
+
+.row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .field-hint {
   font-size: 12px;
   color: var(--text-muted);
@@ -1504,6 +1515,22 @@ h4 {
   background: #d97706;
 }
 
+.balance-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.balance-controls {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  align-items: center;
+}
+
 .glance-grid {
   display: grid;
   gap: 24px;
@@ -2039,6 +2066,21 @@ footer {
 
   .comparison-bars__value {
     text-align: left;
+  }
+
+  .balance-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .balance-controls {
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+
+  .row-between {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 
