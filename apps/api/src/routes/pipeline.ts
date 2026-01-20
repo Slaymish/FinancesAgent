@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
 import { loadEnv } from "../env.js";
 import { requireUserFromInternalRequest } from "../auth.js";
@@ -6,12 +7,22 @@ import { AkahuClient } from "../akahu/client.js";
 import { buildCategoriser } from "../akahu/categoriser.js";
 import { computeMetricsPack } from "../finance/metrics.js";
 
-function parseIsoDate(dateString: string): Date {
-  return new Date(`${dateString}T00:00:00.000Z`);
-}
-
 function subtractMs(date: Date, ms: number): Date {
   return new Date(date.getTime() - ms);
+}
+
+function safeParseIsoDate(raw: string | undefined, fallback: Date): Date {
+  if (!raw) return fallback;
+  const parsed = new Date(`${raw}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) return fallback;
+  return parsed;
+}
+
+async function runBatchedTransactions(operations: Prisma.PrismaPromise<unknown>[], batchSize: number) {
+  for (let i = 0; i < operations.length; i += batchSize) {
+    const batch = operations.slice(i, i + batchSize);
+    await prisma.$transaction(batch);
+  }
 }
 
 export async function pipelineRoutes(app: FastifyInstance) {
@@ -26,127 +37,133 @@ export async function pipelineRoutes(app: FastifyInstance) {
     }
 
     const now = new Date();
-    const syncState = await prisma.financeSyncState.findUnique({ where: { userId: user.id } });
-    const fallbackStart = new Date(now.getTime() - env.AKAHU_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
-    const start = syncState?.lastSyncedAt ? subtractMs(syncState.lastSyncedAt, 1) : fallbackStart;
+    try {
+      const syncState = await prisma.financeSyncState.findUnique({ where: { userId: user.id } });
+      const fallbackStart = new Date(now.getTime() - env.AKAHU_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+      const start = syncState?.lastSyncedAt ? subtractMs(syncState.lastSyncedAt, 1) : fallbackStart;
 
-    const client = new AkahuClient({
-      userToken: env.AKAHU_USER_TOKEN,
-      appToken: env.AKAHU_APP_TOKEN,
-      baseUrl: env.AKAHU_BASE_URL,
-      pageSize: env.AKAHU_PAGE_SIZE
-    });
+      const client = new AkahuClient({
+        userToken: env.AKAHU_USER_TOKEN,
+        appToken: env.AKAHU_APP_TOKEN,
+        baseUrl: env.AKAHU_BASE_URL,
+        pageSize: env.AKAHU_PAGE_SIZE
+      });
 
-    const accounts = await client.fetchAccounts();
-    if (accounts.length > 0) {
-      await prisma.$transaction(
-        accounts.map((account) =>
-          prisma.bankAccount.upsert({
-            where: { userId_akahuId: { userId: user.id, akahuId: account.id } },
+      const accounts = await client.fetchAccounts();
+      if (accounts.length > 0) {
+        await runBatchedTransactions(
+          accounts.map((account) =>
+            prisma.bankAccount.upsert({
+              where: { userId_akahuId: { userId: user.id, akahuId: account.id } },
+              update: {
+                name: account.name,
+                institution: account.institution,
+                type: account.type,
+                status: account.status,
+                currency: account.currency
+              },
+              create: {
+                userId: user.id,
+                akahuId: account.id,
+                name: account.name,
+                institution: account.institution,
+                type: account.type,
+                status: account.status,
+                currency: account.currency
+              }
+            })
+          ),
+          100
+        );
+      }
+
+      const rules = await prisma.categoryRule.findMany({
+        where: { userId: user.id },
+        orderBy: { priority: "asc" }
+      });
+      const categoriser = buildCategoriser(rules);
+
+      const transactions = await client.fetchSettledTransactions({ start, end: now });
+      if (transactions.length > 0) {
+        const operations = transactions.map((tx) => {
+          const { category, categoryType } = categoriser.categorise({
+            amount: tx.amount,
+            descriptionRaw: tx.descriptionRaw,
+            merchantName: tx.merchantName
+          });
+          const isTransfer = categoriser.detectTransfer({
+            amount: tx.amount,
+            descriptionRaw: tx.descriptionRaw,
+            merchantName: tx.merchantName
+          });
+          const date = safeParseIsoDate(tx.date, now);
+          return prisma.transaction.upsert({
+            where: { userId_akahuId: { userId: user.id, akahuId: tx.id } },
             update: {
-              name: account.name,
-              institution: account.institution,
-              type: account.type,
-              status: account.status,
-              currency: account.currency
+              date,
+              accountName: tx.accountName,
+              amount: tx.amount,
+              balance: tx.balance,
+              descriptionRaw: tx.descriptionRaw,
+              merchantName: tx.merchantName,
+              category,
+              categoryType,
+              isTransfer,
+              source: tx.source,
+              importedAt: now
             },
             create: {
               userId: user.id,
-              akahuId: account.id,
-              name: account.name,
-              institution: account.institution,
-              type: account.type,
-              status: account.status,
-              currency: account.currency
+              akahuId: tx.id,
+              date,
+              accountName: tx.accountName,
+              amount: tx.amount,
+              balance: tx.balance,
+              descriptionRaw: tx.descriptionRaw,
+              merchantName: tx.merchantName,
+              category,
+              categoryType,
+              isTransfer,
+              source: tx.source,
+              importedAt: now
             }
-          })
-        )
-      );
-    }
+          });
+        });
 
-    const rules = await prisma.categoryRule.findMany({
-      where: { userId: user.id },
-      orderBy: { priority: "asc" }
-    });
-    const categoriser = buildCategoriser(rules);
+        await runBatchedTransactions(operations, 100);
+      }
 
-    const transactions = await client.fetchSettledTransactions({ start, end: now });
-    const upserts = transactions.map((tx) => {
-      const { category, categoryType } = categoriser.categorise({
-        amount: tx.amount,
-        descriptionRaw: tx.descriptionRaw,
-        merchantName: tx.merchantName
+      await prisma.financeSyncState.upsert({
+        where: { userId: user.id },
+        update: { lastSyncedAt: now },
+        create: { userId: user.id, lastSyncedAt: now }
       });
-      const isTransfer = categoriser.detectTransfer({
-        amount: tx.amount,
-        descriptionRaw: tx.descriptionRaw,
-        merchantName: tx.merchantName
+
+      const metricsStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11, 1));
+      const metricTransactions = await prisma.transaction.findMany({
+        where: { userId: user.id, date: { gte: metricsStart } },
+        orderBy: { date: "asc" }
       });
-      const date = parseIsoDate(tx.date);
-      return prisma.transaction.upsert({
-        where: { userId_akahuId: { userId: user.id, akahuId: tx.id } },
-        update: {
-          date,
-          accountName: tx.accountName,
-          amount: tx.amount,
-          balance: tx.balance,
-          descriptionRaw: tx.descriptionRaw,
-          merchantName: tx.merchantName,
-          category,
-          categoryType,
-          isTransfer,
-          source: tx.source,
-          importedAt: now
-        },
-        create: {
+      const metricsPack = computeMetricsPack(metricTransactions, now);
+
+      const pipelineRun = await prisma.pipelineRun.create({
+        data: {
           userId: user.id,
-          akahuId: tx.id,
-          date,
-          accountName: tx.accountName,
-          amount: tx.amount,
-          balance: tx.balance,
-          descriptionRaw: tx.descriptionRaw,
-          merchantName: tx.merchantName,
-          category,
-          categoryType,
-          isTransfer,
-          source: tx.source,
-          importedAt: now
+          metricsPack,
+          processedCount: transactions.length
         }
       });
-    });
 
-    if (upserts.length > 0) {
-      await prisma.$transaction(upserts);
+      reply.send({
+        ok: true,
+        processed: transactions.length,
+        pipelineRunId: pipelineRun.id,
+        metricsPack
+      });
+    } catch (error) {
+      req.log.error({ err: error }, "pipeline_run_failed");
+      reply.status(500).send({ ok: false, error: "pipeline_failed" });
     }
-
-    await prisma.financeSyncState.upsert({
-      where: { userId: user.id },
-      update: { lastSyncedAt: now },
-      create: { userId: user.id, lastSyncedAt: now }
-    });
-
-    const metricsStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11, 1));
-    const metricTransactions = await prisma.transaction.findMany({
-      where: { userId: user.id, date: { gte: metricsStart } },
-      orderBy: { date: "asc" }
-    });
-    const metricsPack = computeMetricsPack(metricTransactions, now);
-
-    const pipelineRun = await prisma.pipelineRun.create({
-      data: {
-        userId: user.id,
-        metricsPack,
-        processedCount: transactions.length
-      }
-    });
-
-    reply.send({
-      ok: true,
-      processed: transactions.length,
-      pipelineRunId: pipelineRun.id,
-      metricsPack
-    });
   });
 
   app.get("/latest", async (req, reply) => {

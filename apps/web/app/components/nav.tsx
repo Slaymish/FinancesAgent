@@ -1,15 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { LayoutDashboard, SlidersHorizontal, TrendingUp } from "lucide-react";
+import { CalendarClock, Database, LayoutDashboard, Settings } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import SyncButton from "./sync-button";
 
 const links = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/trends", label: "Trends", icon: TrendingUp },
-  { href: "/categories", label: "Categories", icon: SlidersHorizontal }
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/planning", label: "Planning", icon: CalendarClock },
+  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/data", label: "Data", icon: Database }
 ];
 
 export default function Nav() {
@@ -43,7 +44,7 @@ export default function Nav() {
       </button>
       <div id="primary-navigation" className="nav-links" aria-hidden={!isOpen}>
         {links.map((link) => {
-          const isActive = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
+          const isActive = pathname.startsWith(link.href);
           const Icon = link.icon;
           return (
             <Link key={link.href} className={`nav-link${isActive ? " is-active" : ""}`} href={link.href}>

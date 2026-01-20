@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { Prisma, prisma } from "../prisma.js";
+import type { Prisma } from "@prisma/client";
+import { prisma } from "../prisma.js";
 import { loadEnv } from "../env.js";
 import { requireUserFromInternalRequest } from "../auth.js";
 
