@@ -24,6 +24,7 @@ model User {
   categoryRules CategoryRule[]
   pipelineRuns  PipelineRun[]
   syncState     FinanceSyncState?
+  manualFinanceProfile ManualFinanceProfile?
 
   @@map("users")
 }
