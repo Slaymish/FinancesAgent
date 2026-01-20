@@ -1,5 +1,6 @@
-import { LEGACY_USER_ID } from "@finance-agent/shared";
 import { prisma } from "./prisma";
+
+const LEGACY_USER_ID = "legacy-user";
 
 export async function migrateLegacyDataToUser(userId: string) {
   if (!userId || userId === LEGACY_USER_ID) return;

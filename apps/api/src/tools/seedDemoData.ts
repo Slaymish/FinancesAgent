@@ -1,7 +1,7 @@
 import { prisma } from "../prisma.js";
 import { loadDotenv } from "../dotenv.js";
 import { loadEnv } from "../env.js";
-import { LEGACY_USER_ID } from "@finance-agent/shared";
+import { LEGACY_USER_ID } from "../constants.js";
 import { computeMetricsPack } from "../finance/metrics.js";
 
 function startOfDayUtc(date: Date): Date {

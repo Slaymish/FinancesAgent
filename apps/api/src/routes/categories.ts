@@ -91,7 +91,8 @@ export async function categoryRoutes(app: FastifyInstance) {
     });
     const categoriser = buildCategoriser(rules);
 
-    const transactions = await prisma.transaction.findMany({
+    const transactions: Array<{ id: string; amount: number; descriptionRaw: string; merchantName: string }> =
+      await prisma.transaction.findMany({
       where: { userId: user.id },
       select: { id: true, amount: true, descriptionRaw: true, merchantName: true }
     });

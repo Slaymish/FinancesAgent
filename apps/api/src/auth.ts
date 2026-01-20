@@ -1,6 +1,6 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { User } from "@prisma/client";
-import { LEGACY_USER_ID } from "@finance-agent/shared";
+import { LEGACY_USER_ID } from "./constants.js";
 import { prisma } from "./prisma.js";
 import type { Env } from "./env.js";
 

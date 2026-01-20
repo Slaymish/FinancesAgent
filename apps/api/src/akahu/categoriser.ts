@@ -1,5 +1,7 @@
+type AmountOperator = ">" | ">=" | "<" | "<=" | "=";
+
 type AmountCondition =
-  | { type: "comparison"; operator: ">" | ">=" | "<" | "<=" | "="; threshold: number }
+  | { type: "comparison"; operator: AmountOperator; threshold: number }
   | { type: "exact"; values: number[] };
 
 export type CategoryRuleInput = {
@@ -148,11 +150,13 @@ function parseAmountCondition(raw: string): AmountCondition | undefined {
   const condensed = normalized.replace(/\s+/g, "");
   const match = condensed.match(/(>=|<=|>|<|==|=)\$?(-?\d+(?:\.\d+)?)/);
   if (!match) return undefined;
-  const operator = match[1] === "==" ? "=" : match[1];
-  if (!["<", "<=", ">", ">=", "="].includes(operator)) return undefined;
+  const operatorRaw = match[1];
+  if (!operatorRaw) return undefined;
+  const operator = operatorRaw === "==" ? "=" : operatorRaw;
+  if (!isAmountOperator(operator)) return undefined;
   const threshold = Number(match[2]);
   if (!Number.isFinite(threshold)) return undefined;
-  return { type: "comparison", operator: operator as AmountCondition["operator"], threshold };
+  return { type: "comparison", operator, threshold };
 }
 
 function parseNumericLiteral(input: string): number | null {
@@ -161,4 +165,8 @@ function parseNumericLiteral(input: string): number | null {
   if (!match) return null;
   const value = Number(match[1]);
   return Number.isFinite(value) ? value : null;
+}
+
+function isAmountOperator(value: string): value is AmountOperator {
+  return value === ">" || value === ">=" || value === "<" || value === "<=" || value === "=";
 }

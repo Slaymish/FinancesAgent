@@ -86,16 +86,16 @@ export class AkahuClient {
     let cursor: string | null = null;
 
     while (true) {
-      const payload = await this.request<{
-        items?: AkahuTransactionPayload[];
-        cursor?: { next?: string | null };
-      }>("/transactions", {
-        start: params.start.toISOString(),
-        end: params.end.toISOString(),
-        limit: String(this.pageSize),
-        type: "SETTLED",
-        ...(cursor ? { cursor } : {})
-      });
+      const payload: { items?: AkahuTransactionPayload[]; cursor?: { next?: string | null } } = await this.request(
+        "/transactions",
+        {
+          start: params.start.toISOString(),
+          end: params.end.toISOString(),
+          limit: String(this.pageSize),
+          type: "SETTLED",
+          ...(cursor ? { cursor } : {})
+        }
+      );
 
       const items = payload.items ?? [];
       for (const item of items) {
