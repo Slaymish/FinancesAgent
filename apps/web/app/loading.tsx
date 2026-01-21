@@ -6,7 +6,11 @@ export default function AppLoading() {
       <div className="page-heading">
         <div>
           <h1>Loading…</h1>
-          <p className="muted">Fetching the latest signals.</p>
+          <div className="loading-dots">
+            <span className="dot" />
+            <span className="dot" />
+            <span className="dot" />
+          </div>
         </div>
       </div>
       <Card title="Preparing view">

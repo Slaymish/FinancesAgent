@@ -307,7 +307,9 @@ export function DashboardTabs({
           localId: (rule as { id?: string }).id ?? createId(),
           pattern: (rule as { pattern?: string }).pattern ?? "",
           field:
-            (rule as { field?: string }).field === "description_raw" ? "description_raw" : "merchant_normalised",
+            (rule as { field?: string }).field === "description_raw"
+              ? "description_raw"
+              : "merchant_normalised" as "description_raw" | "merchant_normalised",
           category: (rule as { category?: string }).category ?? "",
           categoryType: (rule as { categoryType?: string }).categoryType ?? "",
           priority:
