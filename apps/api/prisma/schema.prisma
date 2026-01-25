@@ -25,6 +25,8 @@ model User {
   pipelineRuns  PipelineRun[]
   syncState     FinanceSyncState?
   manualFinanceProfile ManualFinanceProfile?
+  insightsDocs  InsightsDoc[]
+  insightsSystemPrompt String? @db.Text @map("insights_system_prompt")
 
   @@map("users")
 }
@@ -152,6 +154,7 @@ model PipelineRun {
   processedCount Int     @map("processed_count")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  insightsDocs InsightsDoc[]
 
   @@index([userId, createdAt])
   @@map("pipeline_runs")
@@ -167,4 +170,21 @@ model ManualFinanceProfile {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("manual_finance_profiles")
+}
+
+model InsightsDoc {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  markdown     String
+  diffFromPrev String?  @map("diff_from_prev")
+  metricsPack  Json?    @map("metrics_pack")
+
+  pipelineRunId String?     @map("pipeline_run_id")
+  pipelineRun   PipelineRun? @relation(fields: [pipelineRunId], references: [id], onDelete: SetNull)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([pipelineRunId])
+  @@map("insights_docs")
 }

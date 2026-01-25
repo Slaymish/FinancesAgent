@@ -126,3 +126,25 @@ export const demoCategories = {
     }
   ]
 };
+
+export const demoInsightsLatest = {
+  latest: {
+    id: "demo-insight-1",
+    createdAt: new Date().toISOString(),
+    markdown:
+      "## Financial synthesis\n- **Cash Flow:** Strong surplus this month (Income $5,400 vs Spend $3,120).\n- **Net Worth:** Assets are growing steadily (Latest estimated total $54,200).\n- **Saving:** Excellent savings rate of 42.2%, well above the 20% baseline.\n- **Wishlist:** Upcoming expenses total $1,250 (Car Service and Sydney Flights); current cash flow comfortably covers these.\n- **Next actions:** Finalise the Sydney flight booking while prices are stable.\n- **Numbers used:** Net Worth 54200; Income 5400; Spend 3120; Savings Rate 42.2.",
+    diffFromPrev: null,
+    pipelineRunId: "demo-run-1"
+  }
+};
+
+export const demoInsightsHistory = {
+  docs: [
+    {
+      id: "demo-insight-1",
+      createdAt: new Date().toISOString(),
+      diffFromPrev: null,
+      pipelineRunId: "demo-run-1"
+    }
+  ]
+};

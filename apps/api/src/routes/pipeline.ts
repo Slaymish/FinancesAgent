@@ -6,6 +6,9 @@ import { requireUserFromInternalRequest } from "../auth.js";
 import { AkahuClient } from "../akahu/client.js";
 import { buildCategoriser } from "../akahu/categoriser.js";
 import { computeMetricsPack } from "../finance/metrics.js";
+import { sanitizeInsightsMarkdown } from "../insights/sanitize.js";
+import { generateInsightsUnifiedDiff } from "../insights/llm.js";
+import { applyUnifiedDiff } from "../insights/patch.js";
 
 function subtractMs(date: Date, ms: number): Date {
   return new Date(date.getTime() - ms);
@@ -146,6 +149,12 @@ export async function pipelineRoutes(app: FastifyInstance) {
       });
       const metricsPack = computeMetricsPack(metricTransactions, now);
 
+      const manualProfile = await prisma.manualFinanceProfile.findUnique({ where: { userId: user.id } });
+      const consolidatedData = {
+        metricsPack,
+        manualData: manualProfile?.data ?? null
+      };
+
       const pipelineRun = await prisma.pipelineRun.create({
         data: {
           userId: user.id,
@@ -154,10 +163,65 @@ export async function pipelineRoutes(app: FastifyInstance) {
         }
       });
 
+      const warnings: string[] = [];
+
+      if (env.INSIGHTS_ENABLED) {
+        const prev = await prisma.insightsDoc.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "desc" } });
+
+        if (!prev) {
+          const sanitized = sanitizeInsightsMarkdown("## Financial synthesis\n- Awaiting next update.\n");
+          await prisma.insightsDoc.create({
+            data: {
+              userId: user.id,
+              markdown: sanitized.markdown,
+              diffFromPrev: null,
+              metricsPack: consolidatedData as any,
+              pipelineRunId: pipelineRun.id
+            }
+          });
+        } else {
+          let nextMarkdown = prev.markdown;
+          let diffFromPrev: string | null = null;
+
+          try {
+            const diff = await generateInsightsUnifiedDiff({
+              apiKey: env.OPENAI_API_KEY || "",
+              model: env.INSIGHTS_MODEL || "",
+              previousMarkdown: prev.markdown,
+              metricsPack: consolidatedData,
+              systemPrompt: user.insightsSystemPrompt
+            });
+
+            nextMarkdown = applyUnifiedDiff({ previous: prev.markdown, patch: diff });
+            diffFromPrev = diff;
+          } catch (err) {
+            warnings.push(`Insights update failed: ${err instanceof Error ? err.message : String(err)}`);
+          }
+
+          const sanitized = sanitizeInsightsMarkdown(nextMarkdown);
+          if (sanitized.changed) {
+            warnings.push("Insights markdown normalized to bullet-only format.");
+            diffFromPrev = null;
+          }
+          nextMarkdown = sanitized.markdown;
+
+          await prisma.insightsDoc.create({
+            data: {
+              userId: user.id,
+              markdown: nextMarkdown,
+              diffFromPrev,
+              metricsPack: consolidatedData as any,
+              pipelineRunId: pipelineRun.id
+            }
+          });
+        }
+      }
+
       reply.send({
         ok: true,
         processed: transactions.length,
         pipelineRunId: pipelineRun.id,
+        warnings,
         metricsPack
       });
     } catch (error) {
