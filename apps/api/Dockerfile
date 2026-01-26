@@ -23,12 +23,7 @@ COPY packages/shared/package.json packages/shared/package.json
 RUN pnpm install --frozen-lockfile
 
 # --- build ---
-FROM base AS build
-
-COPY --from=deps /app/node_modules /app/node_modules
-COPY --from=deps /app/apps/api/node_modules /app/apps/api/node_modules
-COPY --from=deps /app/packages/shared/node_modules /app/packages/shared/node_modules
-COPY --from=deps /app/tsconfig.base.json /app/tsconfig.base.json
+FROM deps AS build
 
 # Copy source
 COPY packages/shared packages/shared
@@ -40,14 +35,9 @@ RUN pnpm --filter @finance-agent/api prisma:generate
 RUN pnpm --filter @finance-agent/api build
 
 # --- runtime ---
-FROM node:20-bookworm-slim AS runtime
+FROM base AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-
-RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-certificates python3 python3-pip \
-	&& rm -rf /var/lib/apt/lists/*
-
-RUN pip3 install --no-cache-dir tinker transformers tiktoken --break-system-packages
 
 # Cloud Run sets PORT; our app uses API_PORT
 ENV API_PORT=8080

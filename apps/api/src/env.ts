@@ -18,7 +18,7 @@ const envSchema = z.object({
       }
       return undefined;
     }, z.boolean().optional())
-    .default(true),
+    .default(false),
   AKAHU_APP_TOKEN: z.string().min(1).optional(),
   AKAHU_USER_TOKEN: z.string().min(1).optional(),
   AKAHU_BASE_URL: z.string().min(1).default("https://api.akahu.io/v1"),
