@@ -4,8 +4,10 @@ FROM node:20-bookworm-slim AS base
 WORKDIR /app
 ENV NODE_ENV=production
 
-RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-certificates \
+RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-certificates python3 python3-pip \
 	&& rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install --no-cache-dir tinker transformers tiktoken --break-system-packages
 
 # Enable pnpm
 RUN corepack enable && corepack prepare pnpm@10.15.1 --activate
@@ -42,8 +44,10 @@ FROM node:20-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
-RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-certificates \
+RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-certificates python3 python3-pip \
 	&& rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install --no-cache-dir tinker transformers tiktoken --break-system-packages
 
 # Cloud Run sets PORT; our app uses API_PORT
 ENV API_PORT=8080
@@ -54,6 +58,7 @@ COPY --from=build /app/apps/api/package.json apps/api/package.json
 COPY --from=build /app/packages/shared packages/shared
 COPY --from=build /app/node_modules node_modules
 COPY --from=build /app/apps/api/node_modules apps/api/node_modules
+COPY apps/api/tinker_bridge.py apps/api/tinker_bridge.py
 
 EXPOSE 8080
 CMD ["node", "apps/api/dist/server.js"]

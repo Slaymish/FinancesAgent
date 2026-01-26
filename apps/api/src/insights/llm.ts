@@ -1,5 +1,11 @@
 import { execSync } from "child_process";
+import path from "path";
+import { fileURLToPath } from "url";
 import { FINANCE_INSIGHTS_DEFAULT_SYSTEM_PROMPT } from "@finance-agent/shared";
+import { loadEnv } from "../env.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export async function generateInsightsUnifiedDiff(params: {
     apiKey: string;
@@ -29,12 +35,12 @@ export async function generateInsightsUnifiedDiff(params: {
         "\n\nFINANCE DATA (JSON):\n" +
         JSON.stringify(metricsPack);
 
-    const modelPath = process.env.TINKER_MODEL_PATH || "tinker://1bdf299a-25aa-5110-877d-9ce6c42f64af:train:0/sampler_weights/insights-agent-model";
-    const tinkerTrainingDir = "/home/hamish/Documents/Projects/TinkerTraining";
+    const { TINKER_MODEL_PATH, TINKER_BRIDGE_CMD } = loadEnv();
+    const bridgeScriptPath = path.resolve(__dirname, "../../tinker_bridge.py");
 
     try {
-        const command = `./venv/bin/python generic_sample.py "${modelPath}" ${JSON.stringify(`FINANCE_SUMMARY: ${user}`)} ${JSON.stringify(system)}`;
-        const output = execSync(command, { cwd: tinkerTrainingDir, encoding: "utf-8" });
+        const command = `${TINKER_BRIDGE_CMD} "${bridgeScriptPath}" "${TINKER_MODEL_PATH}" ${JSON.stringify(`FINANCE_SUMMARY: ${user}`)} ${JSON.stringify(system)}`;
+        const output = execSync(command, { encoding: "utf-8" });
         return output.trim();
     } catch (err) {
         console.error("Tinker bridge error:", err);
