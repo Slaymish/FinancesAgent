@@ -4,6 +4,8 @@ import { categoryRoutes } from "./routes/categories.js";
 import { transactionRoutes } from "./routes/transactions.js";
 import { manualDataRoutes } from "./routes/manual-data.js";
 import { insightsRoutes } from "./routes/insights.js";
+import { alertsRoutes } from "./routes/alerts.js";
+import { healthRoutes } from "./routes/health.js";
 
 export function createApp() {
   const app = Fastify({
@@ -28,6 +30,8 @@ export function createApp() {
   app.register(transactionRoutes, { prefix: "/api/transactions" });
   app.register(manualDataRoutes, { prefix: "/api/manual-data" });
   app.register(insightsRoutes, { prefix: "/api/insights" });
+  app.register(alertsRoutes, { prefix: "/api/alerts" });
+  app.register(healthRoutes, { prefix: "/api/health" });
 
   return app;
 }
