@@ -19,6 +19,9 @@ export const authOptions: NextAuthOptions = {
     GitHub({
       clientId: process.env.GITHUB_CLIENT_ID ?? "",
       clientSecret: process.env.GITHUB_CLIENT_SECRET ?? "",
+      // Allow automatic account linking when a GitHub email matches an existing user.
+      // This is safe for our single-provider (GitHub-only) setup, but would require
+      // additional safeguards if multiple OAuth providers are added in the future.
       allowDangerousEmailAccountLinking: true
     })
   ],
