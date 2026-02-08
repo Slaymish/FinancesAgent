@@ -76,13 +76,13 @@ export default async function InboxPage() {
       <PageHeader
         title="Inbox"
         description="Review and confirm transaction categories."
-        meta={[{ label: "To clear", value: stats.toClearCount.toString() }]}
+        meta={[{ label: "To clear", value: stats?.toClearCount?.toString() || "0" }]}
       />
 
-      <InboxStats stats={stats.ok ? stats : null} />
+      <InboxStats stats={stats} />
 
       <Card title="Transactions to Review">
-        {transactions.ok && transactions.transactions.length > 0 ? (
+        {transactions.transactions && transactions.transactions.length > 0 ? (
           <InboxList transactions={transactions.transactions} userId={session.user.id} />
         ) : (
           <div className="empty-state">

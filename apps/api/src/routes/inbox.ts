@@ -118,7 +118,6 @@ export async function inboxRoutes(app: FastifyInstance) {
     // Calculate streak (days with inbox cleared)
     // For MVP, we'll calculate this as consecutive days where inbox was at 0 at some point
     const now = new Date();
-    const userTimezone = user.timezone;
     
     // Get transactions confirmed in last 30 days
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -196,7 +195,8 @@ export async function inboxRoutes(app: FastifyInstance) {
     const body = req.body as { startDate?: string; endDate?: string };
 
     // Build date filter
-    const dateFilter: any = {};
+    type DateFilter = { gte?: Date; lte?: Date };
+    const dateFilter: DateFilter = {};
     if (body.startDate) {
       dateFilter.gte = new Date(body.startDate);
     }

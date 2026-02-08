@@ -11,7 +11,59 @@ FinanceAgent turns daily Akahu bank transactions into a clean, opinionated finan
 
 - Daily sync → transactions + categories → metrics pack
 - Category rules managed in the UI (pattern + field + amount conditions)
+- **Inbox**: Model-assisted transaction categorization with review workflow
 - Trends for spend, savings, wants/essentials, and cashflow
+
+## Inbox Feature
+
+The Inbox provides an intelligent workflow for categorizing transactions:
+
+### State Machine
+
+Every transaction has exactly one inbox state:
+
+1. **auto_classified**: Category applied automatically with high confidence
+   - Applied when a rule matches (confidence = 1.0, source = rule)
+   - Or when model prediction confidence ≥ threshold (default 0.85, source = model)
+2. **needs_review**: Model suggests a category but confidence is below threshold
+   - User must confirm or pick a different category
+3. **unclassified**: No rule match and no model available
+   - User must manually categorize
+4. **cleared**: User has confirmed/set the category
+
+### Categorization Flow
+
+Priority order during transaction processing:
+
+1. **Rule matching** (deterministic, highest priority)
+   - If any rule matches → auto_classified with confidence 1.0
+2. **Model prediction** (ML-assisted, second priority)
+   - If no rule matches and model exists:
+     - Extract features (merchant, description tokens, amount bucket, direction, account)
+     - Predict with user's trained model
+     - If confidence ≥ threshold → auto_classified
+     - If confidence < threshold → needs_review with suggestion
+3. **No match** (fallback)
+   - unclassified, requires manual categorization
+
+### Model Training
+
+- **Training data**: Only transactions with `categoryConfirmed=true` (user explicitly confirmed)
+- **Trigger**: Automatic during pipeline run when ≥20 new confirmed labels since last training
+- **Algorithm**: Multinomial logistic regression with L2 regularization
+- **Features**: Feature hashing (4096 dimensions) of:
+  - Merchant name (normalized)
+  - Description tokens (lowercase)
+  - Amount bucket (tiny/small/medium/large/huge)
+  - Direction (in/out)
+  - Account ID
+- **Storage**: Model weights stored as JSON in `category_models` table per user
+
+### Gamification
+
+- **Streak**: Consecutive days with inbox cleared (showing confirmations)
+- **Auto-classified %**: Percentage of transactions auto-categorized in last 7 days
+- **To clear count**: Number of transactions in needs_review + unclassified states
 
 ## Repo layout
 
@@ -43,6 +95,10 @@ pnpm dev
 - `GET /api/categories` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
 - `POST /api/categories` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
 - `GET /api/transactions/summary` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
+- `GET /api/inbox` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
+- `POST /api/inbox/:id/confirm` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
+- `GET /api/inbox/stats` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
+- `POST /api/inbox/reprocess` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
 
 ## Config (API)
 

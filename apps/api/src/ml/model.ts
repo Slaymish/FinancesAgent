@@ -249,5 +249,24 @@ export function serializeModel(model: ModelWeights): string {
  * Deserialize model from JSON
  */
 export function deserializeModel(json: string): ModelWeights {
-  return JSON.parse(json);
+  const parsed = JSON.parse(json);
+  
+  // Validate structure
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("Invalid model JSON: must be an object");
+  }
+  if (typeof parsed.featureDim !== "number" || parsed.featureDim <= 0) {
+    throw new Error("Invalid model JSON: featureDim must be a positive number");
+  }
+  if (!Array.isArray(parsed.categories)) {
+    throw new Error("Invalid model JSON: categories must be an array");
+  }
+  if (!Array.isArray(parsed.weights)) {
+    throw new Error("Invalid model JSON: weights must be an array");
+  }
+  if (parsed.weights.length !== parsed.categories.length) {
+    throw new Error("Invalid model JSON: weights and categories must have same length");
+  }
+  
+  return parsed as ModelWeights;
 }
