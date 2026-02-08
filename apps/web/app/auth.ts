@@ -22,6 +22,7 @@ export const authOptions: NextAuthOptions = {
     })
   ],
   secret: resolvedSecret,
+  useSecureCookies: process.env.NODE_ENV === "production",
   callbacks: {
     async session({ session, user }) {
       if (session.user && user) {

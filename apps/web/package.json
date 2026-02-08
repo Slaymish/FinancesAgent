@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000",
-    "prebuild": "pnpm --filter @finance-agent/api prisma:generate && pnpm --filter @finance-agent/shared build",
+    "prebuild": "node ./scripts/prisma-deploy.mjs && pnpm --filter @finance-agent/api prisma:generate && pnpm --filter @finance-agent/shared build",
     "build": "next build",
     "start": "next start -p 3000",
     "typecheck": "tsc -p tsconfig.json --noEmit"

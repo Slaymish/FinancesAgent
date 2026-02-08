@@ -112,7 +112,8 @@ See `.env.example` for the full list. Common ones:
 - `PIPELINE_TOKEN`
 - `API_BASE_URL` (for the web app to call the API)
 - `NEXTAUTH_SECRET` + `GITHUB_CLIENT_ID` + `GITHUB_CLIENT_SECRET` (web auth)
-- `DATABASE_URL`
+- `DATABASE_URL` (+ `DATABASE_DIRECT_URL` recommended)
+- `NEXTAUTH_URL` must match your deployed web origin exactly in production
 
 ## Deploy
 

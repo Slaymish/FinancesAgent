@@ -53,5 +53,7 @@ gcloud scheduler jobs create http finance-agent-daily-pipeline \
 ## Notes
 
 - Prefer Secret Manager for secrets.
-- Web deploy isn’t covered here; use `API_BASE_URL` for the web app on Vercel.
+- Web on Vercel must also have `DATABASE_URL` (and ideally `DATABASE_DIRECT_URL`) so Prisma migrations can run during build.
+- Set `NEXTAUTH_URL` to the exact public web origin (for example `https://app.example.com`) to avoid OAuth state-cookie callback errors.
+- Web build now runs `prisma migrate deploy` automatically before `next build`.
 - Cloud SQL is supported but always-on; keep it off for low usage.
