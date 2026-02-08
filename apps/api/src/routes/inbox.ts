@@ -43,7 +43,7 @@ export async function inboxRoutes(app: FastifyInstance) {
 
     const fallbackSuggestedCategory = model ? null : await getFallbackSuggestedCategory(user.id);
     const suggestedTransactions = transactions.map((tx) => {
-      if (tx.suggestedCategoryId || tx.inboxState !== "unclassified") {
+      if (tx.suggestedCategoryId) {
         return tx;
       }
 

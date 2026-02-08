@@ -138,12 +138,28 @@ export async function getFallbackSuggestedCategory(userId: string): Promise<stri
     select: { category: true }
   });
 
-  if (confirmed.length === 0) return null;
+  const fromConfirmed = pickMostFrequentCategory(confirmed.map((row) => row.category));
+  if (fromConfirmed) return fromConfirmed;
 
+  // Fallback to any previously assigned category if explicit confirmations don't exist.
+  const historical = await prisma.transaction.findMany({
+    where: { userId },
+    select: { category: true }
+  });
+
+  return pickMostFrequentCategory(historical.map((row) => row.category));
+}
+
+function pickMostFrequentCategory(values: string[]): string | null {
   const counts = new Map<string, number>();
-  for (const row of confirmed) {
-    const current = counts.get(row.category) ?? 0;
-    counts.set(row.category, current + 1);
+  for (const raw of values) {
+    const category = raw.trim();
+    if (!category) continue;
+    const normalized = category.toLowerCase();
+    if (normalized === "uncategorised" || normalized === "uncategorized") continue;
+
+    const current = counts.get(category) ?? 0;
+    counts.set(category, current + 1);
   }
 
   let topCategory: string | null = null;
@@ -154,7 +170,6 @@ export async function getFallbackSuggestedCategory(userId: string): Promise<stri
       topCount = count;
     }
   }
-
   return topCategory;
 }
 
