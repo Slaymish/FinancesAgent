@@ -1,0 +1,134 @@
+/**
+ * Model training and prediction service.
+ */
+
+import { prisma } from "../prisma.js";
+import type { Transaction, User } from "@prisma/client";
+import {
+  extractFeatures,
+  getFeatureDim,
+  trainModel,
+  predict,
+  serializeModel,
+  deserializeModel,
+  type ModelWeights,
+  type TransactionFeatures
+} from "../ml/index.js";
+
+const MIN_LABELS_TO_TRAIN = 20;
+
+/**
+ * Check if model should be retrained for user.
+ */
+export async function shouldRetrainModel(userId: string): Promise<boolean> {
+  // Get latest model
+  const latestModel = await prisma.categoryModel.findFirst({
+    where: { userId },
+    orderBy: { updatedAt: "desc" }
+  });
+
+  if (!latestModel) {
+    // No model yet - check if we have enough labels
+    const labelCount = await prisma.transaction.count({
+      where: { userId, categoryConfirmed: true }
+    });
+    return labelCount >= MIN_LABELS_TO_TRAIN;
+  }
+
+  // Count new labels since last training
+  const newLabelCount = await prisma.transaction.count({
+    where: {
+      userId,
+      categoryConfirmed: true,
+      confirmedAt: { gt: latestModel.updatedAt }
+    }
+  });
+
+  return newLabelCount >= MIN_LABELS_TO_TRAIN;
+}
+
+/**
+ * Train a new model for user from confirmed transactions.
+ */
+export async function trainModelForUser(userId: string): Promise<void> {
+  // Get all confirmed (labeled) transactions
+  const labeledTransactions = await prisma.transaction.findMany({
+    where: {
+      userId,
+      categoryConfirmed: true,
+      category: { not: "Uncategorised" }
+    },
+    orderBy: { confirmedAt: "asc" }
+  });
+
+  if (labeledTransactions.length < MIN_LABELS_TO_TRAIN) {
+    throw new Error(`Not enough labeled transactions. Need at least ${MIN_LABELS_TO_TRAIN}, have ${labeledTransactions.length}`);
+  }
+
+  // Extract features and prepare training examples
+  const examples = labeledTransactions.map((tx) => ({
+    features: extractFeatures({
+      merchantNormalised: tx.merchantName,
+      descriptionRaw: tx.descriptionRaw,
+      amount: tx.amount,
+      accountId: tx.accountName, // Using accountName as ID
+      date: tx.date
+    }),
+    category: tx.category
+  }));
+
+  // Train model
+  const model = trainModel(examples, getFeatureDim(), {
+    learningRate: 0.01,
+    regularization: 0.01,
+    maxIterations: 100
+  });
+
+  // Serialize and store
+  const weightsJson = JSON.parse(serializeModel(model));
+
+  await prisma.categoryModel.create({
+    data: {
+      userId,
+      weightsJson,
+      trainingLabelCount: labeledTransactions.length
+    }
+  });
+}
+
+/**
+ * Load latest model for user.
+ */
+export async function loadModelForUser(userId: string): Promise<ModelWeights | null> {
+  const modelRecord = await prisma.categoryModel.findFirst({
+    where: { userId },
+    orderBy: { updatedAt: "desc" }
+  });
+
+  if (!modelRecord) {
+    return null;
+  }
+
+  return deserializeModel(JSON.stringify(modelRecord.weightsJson));
+}
+
+/**
+ * Predict category for a transaction using user's model.
+ */
+export async function predictCategory(
+  userId: string,
+  tx: TransactionFeatures
+): Promise<{ category: string; confidence: number } | null> {
+  const model = await loadModelForUser(userId);
+  if (!model) {
+    return null;
+  }
+
+  const features = extractFeatures(tx);
+  const prediction = predict(model, features);
+
+  return {
+    category: prediction.category,
+    confidence: prediction.confidence
+  };
+}

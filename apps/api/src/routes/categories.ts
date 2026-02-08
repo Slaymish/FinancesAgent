@@ -91,26 +91,83 @@ export async function categoryRoutes(app: FastifyInstance) {
     });
     const categoriser = buildCategoriser(rules);
 
-    const transactions: Array<{ id: string; amount: number; descriptionRaw: string; merchantName: string }> =
-      await prisma.transaction.findMany({
+    // Load model
+    const { loadModelForUser } = await import("../ml/service.js");
+    const { computeInboxState } = await import("../ml/inboxState.js");
+    const { extractFeatures } = await import("../ml/index.js");
+    const { predict: predictWithModel } = await import("../ml/model.js");
+    
+    const model = await loadModelForUser(user.id);
+
+    const transactions: Array<{ 
+      id: string; 
+      amount: number; 
+      descriptionRaw: string; 
+      merchantName: string;
+      accountName: string;
+      date: Date;
+    }> = await prisma.transaction.findMany({
       where: { userId: user.id },
-      select: { id: true, amount: true, descriptionRaw: true, merchantName: true }
+      select: { 
+        id: true, 
+        amount: true, 
+        descriptionRaw: true, 
+        merchantName: true,
+        accountName: true,
+        date: true
+      }
     });
 
     const updates = transactions.map((tx) => {
-      const { category, categoryType } = categoriser.categorise({
+      const ruleResult = categoriser.categorise({
         amount: tx.amount,
         descriptionRaw: tx.descriptionRaw,
         merchantName: tx.merchantName
       });
+      
       const isTransfer = categoriser.detectTransfer({
         amount: tx.amount,
         descriptionRaw: tx.descriptionRaw,
         merchantName: tx.merchantName
       });
+
+      // Compute inbox state
+      let modelPrediction = null;
+      if (!ruleResult.matched && model) {
+        const features = extractFeatures({
+          merchantNormalised: tx.merchantName,
+          descriptionRaw: tx.descriptionRaw,
+          amount: tx.amount,
+          accountId: tx.accountName,
+          date: tx.date
+        });
+        const pred = predictWithModel(model, features);
+        modelPrediction = {
+          category: pred.category,
+          categoryType: "",
+          confidence: pred.confidence
+        };
+      }
+
+      const inboxResult = computeInboxState({
+        ruleMatch: ruleResult.matched
+          ? { category: ruleResult.category, categoryType: ruleResult.categoryType, confidence: 1.0, source: "rule" as const }
+          : null,
+        modelPrediction,
+        threshold: user.modelAutoThreshold
+      });
+
       return prisma.transaction.update({
         where: { id: tx.id },
-        data: { category, categoryType, isTransfer }
+        data: { 
+          category: inboxResult.category, 
+          categoryType: inboxResult.categoryType, 
+          isTransfer,
+          inboxState: inboxResult.inboxState,
+          classificationSource: inboxResult.classificationSource,
+          suggestedCategoryId: inboxResult.suggestedCategoryId,
+          confidence: inboxResult.confidence
+        }
       });
     });
 

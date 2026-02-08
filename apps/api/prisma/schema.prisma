@@ -8,6 +8,20 @@ datasource db {
   directUrl = env("DATABASE_DIRECT_URL")
 }
 
+enum InboxState {
+  auto_classified
+  needs_review
+  unclassified
+  cleared
+}
+
+enum ClassificationSource {
+  rule
+  model
+  user
+  none
+}
+
 model User {
   id            String   @id @default(cuid())
   name          String?
@@ -16,6 +30,10 @@ model User {
   image         String?
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
+  
+  // Inbox settings
+  modelAutoThreshold Float @default(0.85) @map("model_auto_threshold")
+  timezone String @default("Pacific/Auckland")
 
   accounts      Account[]
   sessions      Session[]
@@ -27,6 +45,7 @@ model User {
   manualFinanceProfile ManualFinanceProfile?
   insightsDocs  InsightsDoc[]
   insightsSystemPrompt String? @db.Text @map("insights_system_prompt")
+  categoryModels CategoryModel[]
 
   @@map("users")
 }
@@ -109,11 +128,20 @@ model Transaction {
   isTransfer     Boolean  @default(false) @map("is_transfer")
   source         String
   importedAt     DateTime @default(now()) @map("imported_at")
+  
+  // Inbox and ML fields
+  inboxState            InboxState @default(unclassified) @map("inbox_state")
+  classificationSource  ClassificationSource @default(none) @map("classification_source")
+  suggestedCategoryId   String? @map("suggested_category_id")
+  confidence            Float? @map("confidence")
+  categoryConfirmed     Boolean @default(false) @map("category_confirmed")
+  confirmedAt           DateTime? @map("confirmed_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, akahuId])
   @@index([userId, date])
+  @@index([userId, inboxState])
   @@map("transactions")
 }
 
@@ -187,4 +215,18 @@ model InsightsDoc {
   @@index([userId, createdAt])
   @@index([pipelineRunId])
   @@map("insights_docs")
+}
+
+model CategoryModel {
+  id                  String   @id @default(cuid())
+  userId              String   @map("user_id")
+  weightsJson         Json     @map("weights_json")
+  trainingLabelCount  Int      @map("training_label_count")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, updatedAt])
+  @@map("category_models")
 }
