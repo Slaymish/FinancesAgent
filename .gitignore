@@ -11,3 +11,4 @@ storage/local
 HealthAutoExport-2026-01-01-2026-01-15.json
 Personal Billing – Reports – Billing – Hamishapps – Google Cloud console.pdf
 Health Insights Agent_files/
+*.tsbuildinfo
