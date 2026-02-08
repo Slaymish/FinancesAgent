@@ -66,7 +66,3 @@ availableSecrets:
       env: DATABASE_URL
     - versionName: projects/$PROJECT_ID/secrets/${_DATABASE_DIRECT_URL_SECRET}/versions/latest
       env: DATABASE_DIRECT_URL
-    - versionName: projects/$PROJECT_ID/secrets/${_INTERNAL_API_KEY_SECRET}/versions/latest
-      env: INTERNAL_API_KEY
-    - versionName: projects/$PROJECT_ID/secrets/${_PIPELINE_TOKEN_SECRET}/versions/latest
-      env: PIPELINE_TOKEN
