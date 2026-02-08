@@ -22,7 +22,7 @@ export async function inboxRoutes(app: FastifyInstance) {
     const perPage = Math.min(parseInt(query.perPage || "50", 10), 100);
     const skip = (page - 1) * perPage;
 
-    const [transactions, total] = await Promise.all([
+    const [transactions, total, model] = await Promise.all([
       prisma.transaction.findMany({
         where: {
           userId: user.id,
@@ -37,12 +37,46 @@ export async function inboxRoutes(app: FastifyInstance) {
           userId: user.id,
           inboxState: { in: ["needs_review", "unclassified"] }
         }
-      })
+      }),
+      loadModelForUser(user.id)
     ]);
+
+    const fallbackSuggestedCategory = model ? null : await getFallbackSuggestedCategory(user.id);
+    const suggestedTransactions = transactions.map((tx) => {
+      if (tx.suggestedCategoryId || tx.inboxState !== "unclassified") {
+        return tx;
+      }
+
+      if (model) {
+        const features = extractFeatures({
+          merchantNormalised: tx.merchantName,
+          descriptionRaw: tx.descriptionRaw,
+          amount: tx.amount,
+          accountId: tx.accountName,
+          date: tx.date
+        });
+        const pred = predictWithModel(model, features);
+        return {
+          ...tx,
+          suggestedCategoryId: pred.category,
+          confidence: pred.confidence
+        };
+      }
+
+      if (fallbackSuggestedCategory) {
+        return {
+          ...tx,
+          suggestedCategoryId: fallbackSuggestedCategory,
+          confidence: 0
+        };
+      }
+
+      return tx;
+    });
 
     reply.send({
       ok: true,
-      transactions,
+      transactions: suggestedTransactions,
       pagination: {
         page,
         perPage,

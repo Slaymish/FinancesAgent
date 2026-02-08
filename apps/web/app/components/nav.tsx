@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Inbox } from "lucide-react";
+import { CalendarDays, Inbox } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import SyncButton from "./sync-button";
 
 const links = [
-  { href: "/inbox", label: "Inbox", icon: Inbox }
+  { href: "/inbox", label: "Inbox", icon: Inbox },
+  { href: "/month", label: "Month", icon: CalendarDays }
 ];
 
 export default function Nav() {

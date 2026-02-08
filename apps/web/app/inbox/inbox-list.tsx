@@ -74,7 +74,7 @@ export function InboxList({ transactions, userId }: InboxListProps) {
           </div>
 
           <div className="inbox-item-actions">
-            {tx.inboxState === "needs_review" && tx.suggestedCategoryId ? (
+            {tx.suggestedCategoryId ? (
               <div className="inbox-item-suggestion">
                 <div className="muted">Suggested: {tx.suggestedCategoryId}</div>
                 {tx.confidence !== null && (
