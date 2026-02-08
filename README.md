@@ -10,7 +10,7 @@ FinanceAgent turns daily Akahu bank transactions into a clean, opinionated finan
 ## What it does
 
 - Daily sync → transactions + categories → metrics pack
-- Category rules managed in the UI (pattern + field + amount conditions)
+- ML-assisted categorization with user-confirmed labels
 - **Inbox**: Model-assisted transaction categorization with review workflow
 - Trends for spend, savings, wants/essentials, and cashflow
 
@@ -23,33 +23,29 @@ The Inbox provides an intelligent workflow for categorizing transactions:
 Every transaction has exactly one inbox state:
 
 1. **auto_classified**: Category applied automatically with high confidence
-   - Applied when a rule matches (confidence = 1.0, source = rule)
-   - Or when model prediction confidence ≥ threshold (default 0.85, source = model)
+   - Applied when model prediction confidence ≥ threshold (default 0.85, source = model)
 2. **needs_review**: Model suggests a category but confidence is below threshold
    - User must confirm or pick a different category
-3. **unclassified**: No rule match and no model available
+3. **unclassified**: No model suggestion available yet
    - User must manually categorize
 4. **cleared**: User has confirmed/set the category
 
 ### Categorization Flow
 
-Priority order during transaction processing:
+Transaction processing:
 
-1. **Rule matching** (deterministic, highest priority)
-   - If any rule matches → auto_classified with confidence 1.0
-2. **Model prediction** (ML-assisted, second priority)
-   - If no rule matches and model exists:
-     - Extract features (merchant, description tokens, amount bucket, direction, account)
-     - Predict with user's trained model
-     - If confidence ≥ threshold → auto_classified
-     - If confidence < threshold → needs_review with suggestion
-3. **No match** (fallback)
+1. **Model prediction** (ML-assisted)
+   - Extract features (merchant, description tokens, amount bucket, direction, account)
+   - Predict with user's trained model
+   - If confidence ≥ threshold → auto_classified
+   - If confidence < threshold → needs_review with suggestion
+2. **No suggestion available yet**
    - unclassified, requires manual categorization
 
 ### Model Training
 
 - **Training data**: Only transactions with `categoryConfirmed=true` (user explicitly confirmed)
-- **Trigger**: Automatic during pipeline run when ≥20 new confirmed labels since last training
+- **Trigger**: Automatic during pipeline run when at least 1 new confirmed label exists since last training
 - **Algorithm**: Multinomial logistic regression with L2 regularization
 - **Features**: Feature hashing (4096 dimensions) of:
   - Merchant name (normalized)

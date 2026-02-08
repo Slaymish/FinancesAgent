@@ -15,7 +15,7 @@ import {
   type TransactionFeatures
 } from "../ml/index.js";
 
-const MIN_LABELS_TO_TRAIN = 20;
+const MIN_LABELS_TO_TRAIN = 1;
 
 /**
  * Check if model should be retrained for user.
@@ -100,16 +100,62 @@ export async function trainModelForUser(userId: string): Promise<void> {
  * Load latest model for user.
  */
 export async function loadModelForUser(userId: string): Promise<ModelWeights | null> {
-  const modelRecord = await prisma.categoryModel.findFirst({
+  let modelRecord = await prisma.categoryModel.findFirst({
     where: { userId },
     orderBy: { updatedAt: "desc" }
   });
+
+  if (!modelRecord && (await shouldRetrainModel(userId))) {
+    try {
+      await trainModelForUser(userId);
+      modelRecord = await prisma.categoryModel.findFirst({
+        where: { userId },
+        orderBy: { updatedAt: "desc" }
+      });
+    } catch {
+      // Ignore training failures here and allow caller to use a fallback.
+    }
+  }
 
   if (!modelRecord) {
     return null;
   }
 
   return deserializeModel(JSON.stringify(modelRecord.weightsJson));
+}
+
+/**
+ * Best-effort fallback suggestion when a trained model is unavailable.
+ * Returns the most frequent confirmed category entered by the user.
+ */
+export async function getFallbackSuggestedCategory(userId: string): Promise<string | null> {
+  const confirmed = await prisma.transaction.findMany({
+    where: {
+      userId,
+      categoryConfirmed: true,
+      category: { not: "Uncategorised" }
+    },
+    select: { category: true }
+  });
+
+  if (confirmed.length === 0) return null;
+
+  const counts = new Map<string, number>();
+  for (const row of confirmed) {
+    const current = counts.get(row.category) ?? 0;
+    counts.set(row.category, current + 1);
+  }
+
+  let topCategory: string | null = null;
+  let topCount = -1;
+  for (const [category, count] of counts) {
+    if (count > topCount) {
+      topCategory = category;
+      topCount = count;
+    }
+  }
+
+  return topCategory;
 }
 
 /**

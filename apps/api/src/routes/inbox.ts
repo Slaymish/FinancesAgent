@@ -5,8 +5,7 @@ import { requireUserFromInternalRequest } from "../auth.js";
 import { computeInboxState } from "../ml/inboxState.js";
 import { extractFeatures } from "../ml/index.js";
 import { predict as predictWithModel } from "../ml/model.js";
-import { loadModelForUser } from "../ml/service.js";
-import { buildCategoriser } from "../akahu/categoriser.js";
+import { getFallbackSuggestedCategory, loadModelForUser } from "../ml/service.js";
 
 export async function inboxRoutes(app: FastifyInstance) {
   /**
@@ -220,25 +219,15 @@ export async function inboxRoutes(app: FastifyInstance) {
       }
     });
 
-    // Load rules and model
-    const rules = await prisma.categoryRule.findMany({
-      where: { userId: user.id },
-      orderBy: { priority: "asc" }
-    });
-    const categoriser = buildCategoriser(rules);
+    // Load model (or fallback suggestion category when model is unavailable)
     const model = await loadModelForUser(user.id);
+    const fallbackSuggestedCategory = model ? null : await getFallbackSuggestedCategory(user.id);
 
     // Reprocess each transaction
     const updates = transactions.map((tx) => {
-      const ruleResult = categoriser.categorise({
-        amount: tx.amount,
-        descriptionRaw: tx.descriptionRaw,
-        merchantName: tx.merchantName
-      });
-
       // Compute inbox state
       let modelPrediction = null;
-      if (!ruleResult.matched && model) {
+      if (model) {
         const features = extractFeatures({
           merchantNormalised: tx.merchantName,
           descriptionRaw: tx.descriptionRaw,
@@ -252,12 +241,15 @@ export async function inboxRoutes(app: FastifyInstance) {
           categoryType: "",
           confidence: pred.confidence
         };
+      } else if (fallbackSuggestedCategory) {
+        modelPrediction = {
+          category: fallbackSuggestedCategory,
+          categoryType: "",
+          confidence: 0
+        };
       }
 
       const inboxResult = computeInboxState({
-        ruleMatch: ruleResult.matched
-          ? { category: ruleResult.category, categoryType: ruleResult.categoryType, confidence: 1.0, source: "rule" as const }
-          : null,
         modelPrediction,
         threshold: user.modelAutoThreshold
       });

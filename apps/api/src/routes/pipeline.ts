@@ -80,30 +80,20 @@ export async function pipelineRoutes(app: FastifyInstance) {
         );
       }
 
-      const rules = await prisma.categoryRule.findMany({
-        where: { userId: user.id },
-        orderBy: { priority: "asc" }
-      });
-      const categoriser = buildCategoriser(rules);
-
       // Load model for predictions
-      const { loadModelForUser } = await import("../ml/service.js");
+      const { loadModelForUser, getFallbackSuggestedCategory } = await import("../ml/service.js");
       const { computeInboxState } = await import("../ml/inboxState.js");
       const { extractFeatures } = await import("../ml/index.js");
       const { predict: predictWithModel } = await import("../ml/model.js");
       
       const model = await loadModelForUser(user.id);
+      const fallbackSuggestedCategory = model ? null : await getFallbackSuggestedCategory(user.id);
+      const transferDetector = buildCategoriser([]);
 
       const transactions = await client.fetchSettledTransactions({ start, end: now });
       if (transactions.length > 0) {
         const operations = transactions.map((tx) => {
-          const ruleResult = categoriser.categorise({
-            amount: tx.amount,
-            descriptionRaw: tx.descriptionRaw,
-            merchantName: tx.merchantName
-          });
-          
-          const isTransfer = categoriser.detectTransfer({
+          const isTransfer = transferDetector.detectTransfer({
             amount: tx.amount,
             descriptionRaw: tx.descriptionRaw,
             merchantName: tx.merchantName
@@ -111,7 +101,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
 
           // Compute inbox state using state machine
           let modelPrediction = null;
-          if (!ruleResult.matched && model) {
+          if (model) {
             const features = extractFeatures({
               merchantNormalised: tx.merchantName,
               descriptionRaw: tx.descriptionRaw,
@@ -125,12 +115,15 @@ export async function pipelineRoutes(app: FastifyInstance) {
               categoryType: "", // We don't store categoryType in model
               confidence: pred.confidence
             };
+          } else if (fallbackSuggestedCategory) {
+            modelPrediction = {
+              category: fallbackSuggestedCategory,
+              categoryType: "",
+              confidence: 0
+            };
           }
 
           const inboxResult = computeInboxState({
-            ruleMatch: ruleResult.matched
-              ? { category: ruleResult.category, categoryType: ruleResult.categoryType, confidence: 1.0, source: "rule" as const }
-              : null,
             modelPrediction,
             threshold: user.modelAutoThreshold
           });

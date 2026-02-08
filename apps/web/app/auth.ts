@@ -3,7 +3,7 @@ import type { Adapter } from "next-auth/adapters";
 import GitHub from "next-auth/providers/github";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "./lib/prisma";
-import { migrateLegacyDataToUser, seedDefaultCategoryRules } from "./lib/user-provisioning";
+import { migrateLegacyDataToUser } from "./lib/user-provisioning";
 
 const resolvedSecret =
   process.env.NEXTAUTH_SECRET ??
@@ -35,7 +35,6 @@ export const authOptions: NextAuthOptions = {
     async signIn({ user }) {
       if (!user?.id) return;
       await migrateLegacyDataToUser(user.id);
-      await seedDefaultCategoryRules(user.id);
     }
   }
 };
