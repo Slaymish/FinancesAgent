@@ -3,42 +3,56 @@ import { InboxList } from "./inbox-list";
 import { InboxStats } from "./inbox-stats";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../auth";
+import { fetchUserApi } from "../lib/api-client";
+import type { Session } from "next-auth";
 
 export const dynamic = "force-dynamic";
 
-async function getInboxData(userId: string) {
-  try {
-    const apiBaseUrl = process.env.API_BASE_URL || "http://localhost:3001";
-    const internalApiKey = process.env.INTERNAL_API_KEY || "dev-internal-key";
+type InboxResponse = {
+  ok: boolean;
+  transactions: Array<{
+    id: string;
+    date: string;
+    merchantName: string;
+    descriptionRaw: string;
+    amount: number;
+    category: string;
+    inboxState: string;
+    suggestedCategoryId: string | null;
+    confidence: number | null;
+  }>;
+};
 
+type InboxStatsResponse = {
+  ok: boolean;
+  toClearCount: number;
+  streak: number;
+  autoClassifiedPercent: number;
+};
+
+async function getInboxData(session: Session | null) {
+  if (!session?.user?.id) return { data: null, errorStatus: 401 };
+
+  try {
     const [transactionsRes, statsRes] = await Promise.all([
-      fetch(`${apiBaseUrl}/api/inbox`, {
-        headers: {
-          "X-INTERNAL-API-KEY": internalApiKey,
-          "X-USER-ID": userId
-        },
-        cache: "no-store"
-      }),
-      fetch(`${apiBaseUrl}/api/inbox/stats`, {
-        headers: {
-          "X-INTERNAL-API-KEY": internalApiKey,
-          "X-USER-ID": userId
-        },
-        cache: "no-store"
-      })
+      fetchUserApi<InboxResponse>(session, "/api/inbox"),
+      fetchUserApi<InboxStatsResponse>(session, "/api/inbox/stats")
     ]);
 
-    if (!transactionsRes.ok || !statsRes.ok) {
-      return null;
+    if (!transactionsRes.ok || !transactionsRes.data) {
+      return { data: null, errorStatus: transactionsRes.status };
+    }
+    if (!statsRes.ok || !statsRes.data) {
+      return { data: null, errorStatus: statsRes.status };
     }
 
-    const transactions = await transactionsRes.json();
-    const stats = await statsRes.json();
-
-    return { transactions, stats };
+    return {
+      data: { transactions: transactionsRes.data, stats: statsRes.data },
+      errorStatus: undefined
+    };
   } catch (error) {
     console.error("Failed to fetch inbox data:", error);
-    return null;
+    return { data: null, errorStatus: 500 };
   }
 }
 
@@ -56,14 +70,14 @@ export default async function InboxPage() {
     );
   }
 
-  const data = await getInboxData(session.user.id);
+  const { data, errorStatus } = await getInboxData(session);
 
   if (!data) {
     return (
       <div className="section">
         <PageHeader title="Inbox" description="Review and confirm transaction categories." />
         <Card title="API unavailable">
-          <p className="muted">Failed to load inbox data from API.</p>
+          <p className="muted">Failed to load inbox data from API: {errorStatus ?? "unknown"}</p>
         </Card>
       </div>
     );
