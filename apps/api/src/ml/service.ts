@@ -128,7 +128,7 @@ export async function loadModelForUser(userId: string): Promise<ModelWeights | n
  * Best-effort fallback suggestion when a trained model is unavailable.
  * Returns the most frequent confirmed category entered by the user.
  */
-export async function getFallbackSuggestedCategory(userId: string): Promise<string | null> {
+export async function getFallbackSuggestedCategory(userId: string): Promise<string> {
   const confirmed = await prisma.transaction.findMany({
     where: {
       userId,
@@ -147,7 +147,7 @@ export async function getFallbackSuggestedCategory(userId: string): Promise<stri
     select: { category: true }
   });
 
-  return pickMostFrequentCategory(historical.map((row) => row.category));
+  return pickMostFrequentCategory(historical.map((row) => row.category)) ?? "Uncategorised";
 }
 
 function pickMostFrequentCategory(values: string[]): string | null {

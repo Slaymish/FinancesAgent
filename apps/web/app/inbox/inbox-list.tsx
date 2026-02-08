@@ -17,10 +17,9 @@ type Transaction = {
 
 type InboxListProps = {
   transactions: Transaction[];
-  userId: string;
 };
 
-export function InboxList({ transactions, userId }: InboxListProps) {
+export function InboxList({ transactions }: InboxListProps) {
   const [items, setItems] = useState(transactions);
   const [confirming, setConfirming] = useState<string | null>(null);
 
@@ -62,28 +61,30 @@ export function InboxList({ transactions, userId }: InboxListProps) {
 
   return (
     <div className="inbox-list">
-      {items.map((tx) => (
-        <div key={tx.id} className="inbox-item">
-          <div className="inbox-item-info">
-            <div className="inbox-item-merchant">{tx.merchantName}</div>
-            <div className="inbox-item-description muted">{tx.descriptionRaw}</div>
-            <div className="inbox-item-meta muted">
-              <span>{formatDateTime(tx.date)}</span>
-              <span>{formatCurrency(tx.amount, { sign: true })}</span>
-            </div>
-          </div>
+      {items.map((tx) => {
+        const suggestedCategory = tx.suggestedCategoryId ?? "Uncategorised";
 
-          <div className="inbox-item-actions">
-            {tx.suggestedCategoryId ? (
+        return (
+          <div key={tx.id} className="inbox-item">
+            <div className="inbox-item-info">
+              <div className="inbox-item-merchant">{tx.merchantName}</div>
+              <div className="inbox-item-description muted">{tx.descriptionRaw}</div>
+              <div className="inbox-item-meta muted">
+                <span>{formatDateTime(tx.date)}</span>
+                <span>{formatCurrency(tx.amount, { sign: true })}</span>
+              </div>
+            </div>
+
+            <div className="inbox-item-actions">
               <div className="inbox-item-suggestion">
-                <div className="muted">Suggested: {tx.suggestedCategoryId}</div>
+                <div className="muted">Suggested: {suggestedCategory}</div>
                 {tx.confidence !== null && (
                   <div className="muted">Confidence: {Math.round(tx.confidence * 100)}%</div>
                 )}
                 <div className="button-group">
                   <button
                     className="btn btn-primary btn-sm"
-                    onClick={() => handleConfirm(tx.id, tx.suggestedCategoryId!)}
+                    onClick={() => handleConfirm(tx.id, suggestedCategory)}
                     disabled={confirming === tx.id}
                   >
                     {confirming === tx.id ? "..." : "✓ Confirm"}
@@ -100,24 +101,10 @@ export function InboxList({ transactions, userId }: InboxListProps) {
                   </button>
                 </div>
               </div>
-            ) : (
-              <div className="inbox-item-suggestion">
-                <div className="muted">No suggestion available</div>
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={() => {
-                    const category = prompt("Enter category:");
-                    if (category) handleConfirm(tx.id, category);
-                  }}
-                  disabled={confirming === tx.id}
-                >
-                  {confirming === tx.id ? "..." : "Set Category"}
-                </button>
-              </div>
-            )}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

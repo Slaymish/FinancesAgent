@@ -26,8 +26,8 @@ Every transaction has exactly one inbox state:
    - Applied when model prediction confidence ≥ threshold (default 0.85, source = model)
 2. **needs_review**: Model suggests a category but confidence is below threshold
    - User must confirm or pick a different category
-3. **unclassified**: No model suggestion available yet
-   - User must manually categorize
+3. **unclassified**: Suggestion falls back to `Uncategorised`
+   - User can confirm the fallback or pick a different category
 4. **cleared**: User has confirmed/set the category
 
 ### Categorization Flow
@@ -39,8 +39,8 @@ Transaction processing:
    - Predict with user's trained model
    - If confidence ≥ threshold → auto_classified
    - If confidence < threshold → needs_review with suggestion
-2. **No suggestion available yet**
-   - unclassified, requires manual categorization
+2. **No model available yet**
+   - Suggestion defaults to `Uncategorised`
 
 ### Model Training
 
@@ -89,7 +89,7 @@ pnpm dev
 - `POST /api/pipeline/run` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`, or `X-PIPELINE-TOKEN` + `X-USER-ID`)
 - `GET /api/pipeline/latest` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
 - `GET /api/categories` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
-- `POST /api/categories` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
+- `PUT /api/categories` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
 - `GET /api/transactions/summary` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
 - `GET /api/inbox` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
 - `POST /api/inbox/:id/confirm` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)

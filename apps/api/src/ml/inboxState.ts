@@ -71,7 +71,7 @@ export function computeInboxState(params: {
     category: "Uncategorised",
     categoryType: "",
     classificationSource: "none",
-    suggestedCategoryId: null,
+    suggestedCategoryId: "Uncategorised",
     confidence: null
   };
 }

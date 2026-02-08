@@ -32,7 +32,7 @@ gcloud run deploy $SERVICE \
   --min-instances 0 \
   --max-instances 1 \
   --set-env-vars \
-API_PORT=8080,INTERNAL_API_KEY=REPLACE_ME,PIPELINE_TOKEN=REPLACE_ME,AKAHU_APP_TOKEN=REPLACE_ME,AKAHU_USER_TOKEN=REPLACE_ME,DATABASE_URL='REPLACE_WITH_NEON_URL'
+API_PORT=8080,AKAHU_APP_TOKEN=REPLACE_ME,AKAHU_USER_TOKEN=REPLACE_ME,DATABASE_URL='REPLACE_WITH_NEON_URL'
 ```
 
 ## Daily pipeline job
@@ -53,6 +53,7 @@ gcloud scheduler jobs create http finance-agent-daily-pipeline \
 ## Notes
 
 - Prefer Secret Manager for secrets.
+- `INTERNAL_API_KEY` and `PIPELINE_TOKEN` are required; do not deploy with default/dev values.
 - Web on Vercel must also have `DATABASE_URL` (and ideally `DATABASE_DIRECT_URL`) so Prisma migrations can run during build.
 - Set `NEXTAUTH_URL` to the exact public web origin (for example `https://app.example.com`) to avoid OAuth state-cookie callback errors.
 - Web build now runs `prisma migrate deploy` automatically before `next build`.

@@ -13,7 +13,13 @@ export async function POST() {
   }
 
   const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:3001";
-  const internalKey = process.env.INTERNAL_API_KEY ?? "dev-internal-key";
+  const internalKey = process.env.INTERNAL_API_KEY;
+  if (!internalKey) {
+    return new Response(JSON.stringify({ error: "server_misconfigured" }), {
+      status: 500,
+      headers: { "content-type": "application/json" }
+    });
+  }
   const pipelineToken = process.env.PIPELINE_TOKEN;
   const headers: Record<string, string> = {
     "x-user-id": session.user.id,

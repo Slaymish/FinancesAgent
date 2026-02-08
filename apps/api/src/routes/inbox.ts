@@ -5,7 +5,12 @@ import { requireUserFromInternalRequest } from "../auth.js";
 import { computeInboxState } from "../ml/inboxState.js";
 import { extractFeatures } from "../ml/index.js";
 import { predict as predictWithModel } from "../ml/model.js";
-import { getFallbackSuggestedCategory, loadModelForUser } from "../ml/service.js";
+import {
+  getFallbackSuggestedCategory,
+  loadModelForUser,
+  shouldRetrainModel,
+  trainModelForUser
+} from "../ml/service.js";
 
 export async function inboxRoutes(app: FastifyInstance) {
   /**
@@ -128,7 +133,25 @@ export async function inboxRoutes(app: FastifyInstance) {
       }
     });
 
-    reply.send({ ok: true, transaction: updated });
+    let modelRetrained = false;
+    let warning: string | undefined;
+
+    try {
+      if (await shouldRetrainModel(user.id)) {
+        await trainModelForUser(user.id);
+        modelRetrained = true;
+      }
+    } catch (error) {
+      req.log.warn({ err: error, userId: user.id }, "inbox_confirm_retrain_failed");
+      warning = "model_retrain_failed";
+    }
+
+    reply.send({
+      ok: true,
+      transaction: updated,
+      modelRetrained,
+      ...(warning ? { warning } : {})
+    });
   });
 
   /**

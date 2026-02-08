@@ -12,7 +12,11 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
     const body = await request.json();
     const apiBaseUrl = process.env.API_BASE_URL || "http://localhost:3001";
-    const internalApiKey = process.env.INTERNAL_API_KEY || "dev-internal-key";
+    const internalApiKey = process.env.INTERNAL_API_KEY;
+
+    if (!internalApiKey) {
+      return NextResponse.json({ error: "server_misconfigured" }, { status: 500 });
+    }
 
     const res = await fetch(`${apiBaseUrl}/api/inbox/${params.id}/confirm`, {
       method: "POST",

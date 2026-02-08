@@ -5,7 +5,8 @@ export const dynamic = "force-dynamic";
 
 function buildHeaders(userId: string) {
   const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:3001";
-  const internalKey = process.env.INTERNAL_API_KEY ?? "dev-internal-key";
+  const internalKey = process.env.INTERNAL_API_KEY;
+  if (!internalKey) return null;
   const pipelineToken = process.env.PIPELINE_TOKEN;
   const headers: Record<string, string> = {
     "x-user-id": userId,
@@ -24,7 +25,15 @@ export async function GET() {
     });
   }
 
-  const { apiBaseUrl, headers } = buildHeaders(session.user.id);
+  const built = buildHeaders(session.user.id);
+  if (!built) {
+    return new Response(JSON.stringify({ error: "server_misconfigured" }), {
+      status: 500,
+      headers: { "content-type": "application/json" }
+    });
+  }
+
+  const { apiBaseUrl, headers } = built;
   const res = await fetch(`${apiBaseUrl}/api/manual-data`, { headers });
   const body = await res.json().catch(() => ({}));
   return new Response(JSON.stringify(body), { status: res.status, headers: { "content-type": "application/json" } });
@@ -49,7 +58,15 @@ export async function PUT(request: Request) {
     });
   }
 
-  const { apiBaseUrl, headers } = buildHeaders(session.user.id);
+  const built = buildHeaders(session.user.id);
+  if (!built) {
+    return new Response(JSON.stringify({ error: "server_misconfigured" }), {
+      status: 500,
+      headers: { "content-type": "application/json" }
+    });
+  }
+
+  const { apiBaseUrl, headers } = built;
   const res = await fetch(`${apiBaseUrl}/api/manual-data`, {
     method: "PUT",
     headers: { ...headers, "content-type": "application/json" },

@@ -61,14 +61,14 @@ export async function requireUserFromInternalRequest(params: {
     return null;
   }
 
-  // Keep API requests resilient if auth and API point at different DBs.
-  // NextAuth will create the user in the auth DB; API can safely upsert by ID.
-  return prisma.user.upsert({
-    where: { id: userId },
-    update: {},
-    create: {
-      id: userId,
-      name: "User"
-    }
+  const user = await prisma.user.findUnique({
+    where: { id: userId }
   });
+
+  if (!user) {
+    reply.code(401).send({ error: "unknown_user" });
+    return null;
+  }
+
+  return user;
 }

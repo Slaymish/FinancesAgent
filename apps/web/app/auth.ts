@@ -5,11 +5,13 @@ import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "./lib/prisma";
 import { migrateLegacyDataToUser } from "./lib/user-provisioning";
 
-const resolvedSecret =
-  process.env.NEXTAUTH_SECRET ??
-  process.env.AUTH_SECRET ??
-  // Fallback keeps the app from crashing if secret is missing; replace in prod.
-  "development-only-secret";
+const configuredSecret = process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET;
+
+if (!configuredSecret && process.env.NODE_ENV === "production") {
+  throw new Error("NEXTAUTH_SECRET (or AUTH_SECRET) must be set in production.");
+}
+
+const resolvedSecret = configuredSecret ?? "development-only-secret";
 
 const adapter: Adapter = PrismaAdapter(prisma);
 
