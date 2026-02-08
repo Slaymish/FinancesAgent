@@ -53,7 +53,7 @@ export default function RootLayout({
                   </svg>
                   <div>
                     <div className="brand-title">Finance Agent</div>
-                    <div className="brand-subtitle">Know where the money moves</div>
+                    <div className="brand-subtitle">Inbox-first classification</div>
                   </div>
                 </div>
                 <Nav />

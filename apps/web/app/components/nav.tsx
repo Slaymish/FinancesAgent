@@ -1,18 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarClock, Database, Inbox, LayoutDashboard, NotebookText, Settings } from "lucide-react";
+import { Inbox } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import SyncButton from "./sync-button";
 
 const links = [
-  { href: "/inbox", label: "Inbox", icon: Inbox },
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/insights", label: "Insights", icon: NotebookText },
-  { href: "/planning", label: "Planning", icon: CalendarClock },
-  { href: "/settings", label: "Settings", icon: Settings },
-  { href: "/data", label: "Data", icon: Database }
+  { href: "/inbox", label: "Inbox", icon: Inbox }
 ];
 
 export default function Nav() {
