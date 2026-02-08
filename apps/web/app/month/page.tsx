@@ -105,7 +105,7 @@ export default async function MonthPage() {
                       height: "8px",
                       width: "100%",
                       borderRadius: "999px",
-                      background: "var(--surface-2)",
+                      background: "var(--surface-muted)",
                       overflow: "hidden"
                     }}
                   >
@@ -126,4 +126,3 @@ export default async function MonthPage() {
     </div>
   );
 }
-

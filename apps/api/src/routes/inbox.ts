@@ -8,8 +8,7 @@ import { predict as predictWithModel } from "../ml/model.js";
 import {
   getFallbackSuggestedCategory,
   loadModelForUser,
-  shouldRetrainModel,
-  trainModelForUser
+  retrainModelForUserIfNeeded
 } from "../ml/service.js";
 
 export async function inboxRoutes(app: FastifyInstance) {
@@ -137,10 +136,7 @@ export async function inboxRoutes(app: FastifyInstance) {
     let warning: string | undefined;
 
     try {
-      if (await shouldRetrainModel(user.id)) {
-        await trainModelForUser(user.id);
-        modelRetrained = true;
-      }
+      modelRetrained = await retrainModelForUserIfNeeded(user.id);
     } catch (error) {
       req.log.warn({ err: error, userId: user.id }, "inbox_confirm_retrain_failed");
       warning = "model_retrain_failed";

@@ -29,6 +29,9 @@ export default function UserGreeting() {
         <ChevronDown className="user-menu__chevron" aria-hidden="true" />
       </summary>
       <div className="user-menu__panel" role="menu" aria-label="Account">
+        <Link className="user-menu__item" href="/categories" role="menuitem">
+          Categories
+        </Link>
         <Link className="user-menu__item" href="/month" role="menuitem">
           Month
         </Link>

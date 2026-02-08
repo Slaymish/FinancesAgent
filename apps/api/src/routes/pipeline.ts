@@ -255,11 +255,10 @@ export async function pipelineRoutes(app: FastifyInstance) {
       }
 
       // Train model if needed
-      const { shouldRetrainModel, trainModelForUser } = await import("../ml/service.js");
+      const { retrainModelForUserIfNeeded } = await import("../ml/service.js");
       try {
-        if (await shouldRetrainModel(user.id)) {
-          await trainModelForUser(user.id);
-          warnings.push("Model retrained with new confirmed labels");
+        if (await retrainModelForUserIfNeeded(user.id)) {
+          warnings.push("Model retrained");
         }
       } catch (err) {
         warnings.push(`Model training skipped: ${err instanceof Error ? err.message : String(err)}`);

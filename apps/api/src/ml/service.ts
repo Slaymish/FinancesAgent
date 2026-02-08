@@ -16,6 +16,7 @@ import {
 } from "../ml/index.js";
 
 const MIN_LABELS_TO_TRAIN = 1;
+const MAX_MODEL_STALENESS_MS = 3 * 24 * 60 * 60 * 1000;
 
 /**
  * Check if model should be retrained for user.
@@ -30,7 +31,7 @@ export async function shouldRetrainModel(userId: string): Promise<boolean> {
   if (!latestModel) {
     // No model yet - check if we have enough labels
     const labelCount = await prisma.transaction.count({
-      where: { userId, categoryConfirmed: true }
+      where: { userId, categoryConfirmed: true, category: { not: "Uncategorised" } }
     });
     return labelCount >= MIN_LABELS_TO_TRAIN;
   }
@@ -40,11 +41,25 @@ export async function shouldRetrainModel(userId: string): Promise<boolean> {
     where: {
       userId,
       categoryConfirmed: true,
+      category: { not: "Uncategorised" },
       confirmedAt: { gt: latestModel.updatedAt }
     }
   });
 
-  return newLabelCount >= MIN_LABELS_TO_TRAIN;
+  if (newLabelCount >= MIN_LABELS_TO_TRAIN) {
+    return true;
+  }
+
+  const modelAgeMs = Date.now() - latestModel.updatedAt.getTime();
+  if (modelAgeMs < MAX_MODEL_STALENESS_MS) {
+    return false;
+  }
+
+  const labelCount = await prisma.transaction.count({
+    where: { userId, categoryConfirmed: true, category: { not: "Uncategorised" } }
+  });
+
+  return labelCount >= MIN_LABELS_TO_TRAIN;
 }
 
 /**
@@ -94,6 +109,15 @@ export async function trainModelForUser(userId: string): Promise<void> {
       trainingLabelCount: labeledTransactions.length
     }
   });
+}
+
+export async function retrainModelForUserIfNeeded(userId: string): Promise<boolean> {
+  if (!(await shouldRetrainModel(userId))) {
+    return false;
+  }
+
+  await trainModelForUser(userId);
+  return true;
 }
 
 /**

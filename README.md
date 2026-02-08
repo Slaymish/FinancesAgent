@@ -45,7 +45,7 @@ Transaction processing:
 ### Model Training
 
 - **Training data**: Only transactions with `categoryConfirmed=true` (user explicitly confirmed)
-- **Trigger**: Automatic during pipeline run when at least 1 new confirmed label exists since last training
+- **Trigger**: Automatic after user category confirmations/edits, and also periodically during pipeline runs
 - **Algorithm**: Multinomial logistic regression with L2 regularization
 - **Features**: Feature hashing (4096 dimensions) of:
   - Merchant name (normalized)
@@ -91,6 +91,8 @@ pnpm dev
 - `GET /api/categories` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
 - `PUT /api/categories` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
 - `GET /api/transactions/summary` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
+- `GET /api/transactions/categories` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
+- `PUT /api/transactions/:id/category` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
 - `GET /api/inbox` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
 - `POST /api/inbox/:id/confirm` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
 - `GET /api/inbox/stats` (auth: `X-INTERNAL-API-KEY` + `X-USER-ID`)
