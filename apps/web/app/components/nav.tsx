@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarClock, Database, LayoutDashboard, NotebookText, Settings } from "lucide-react";
+import { CalendarClock, Database, Inbox, LayoutDashboard, NotebookText, Settings } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import SyncButton from "./sync-button";
 
 const links = [
+  { href: "/inbox", label: "Inbox", icon: Inbox },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/insights", label: "Insights", icon: NotebookText },
   { href: "/planning", label: "Planning", icon: CalendarClock },
