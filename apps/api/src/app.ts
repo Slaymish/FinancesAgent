@@ -6,6 +6,7 @@ import { manualDataRoutes } from "./routes/manual-data.js";
 import { insightsRoutes } from "./routes/insights.js";
 import { alertsRoutes } from "./routes/alerts.js";
 import { healthRoutes } from "./routes/health.js";
+import { inboxRoutes } from "./routes/inbox.js";
 
 export function createApp() {
   const app = Fastify({
@@ -32,6 +33,7 @@ export function createApp() {
   app.register(insightsRoutes, { prefix: "/api/insights" });
   app.register(alertsRoutes, { prefix: "/api/alerts" });
   app.register(healthRoutes, { prefix: "/api/health" });
+  app.register(inboxRoutes, { prefix: "/api/inbox" });
 
   return app;
 }

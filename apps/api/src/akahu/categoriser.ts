@@ -55,14 +55,14 @@ export function buildCategoriser(rules: CategoryRuleInput[]) {
   compiled.sort((a, b) => a.priority - b.priority);
 
   return {
-    categorise(target: CategorisationTarget): { category: string; categoryType: string } {
+    categorise(target: CategorisationTarget): { category: string; categoryType: string; matched: boolean } {
       for (const rule of compiled) {
         const fieldValue = rule.field === "description_raw" ? target.descriptionRaw : target.merchantName;
         if (!rule.pattern.test(fieldValue ?? "")) continue;
         if (rule.amountCondition && !amountConditionMatches(rule.amountCondition, target.amount)) continue;
-        return { category: rule.category, categoryType: rule.categoryType };
+        return { category: rule.category, categoryType: rule.categoryType, matched: true };
       }
-      return { category: "Uncategorised", categoryType: "" };
+      return { category: "Uncategorised", categoryType: "", matched: false };
     },
     detectTransfer(target: CategorisationTarget): boolean {
       const description = (target.descriptionRaw ?? "").toLowerCase();

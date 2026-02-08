@@ -86,19 +86,55 @@ export async function pipelineRoutes(app: FastifyInstance) {
       });
       const categoriser = buildCategoriser(rules);
 
+      // Load model for predictions
+      const { loadModelForUser } = await import("../ml/service.js");
+      const { computeInboxState } = await import("../ml/inboxState.js");
+      const { extractFeatures } = await import("../ml/index.js");
+      const { predict: predictWithModel } = await import("../ml/model.js");
+      
+      const model = await loadModelForUser(user.id);
+
       const transactions = await client.fetchSettledTransactions({ start, end: now });
       if (transactions.length > 0) {
         const operations = transactions.map((tx) => {
-          const { category, categoryType } = categoriser.categorise({
+          const ruleResult = categoriser.categorise({
             amount: tx.amount,
             descriptionRaw: tx.descriptionRaw,
             merchantName: tx.merchantName
           });
+          
           const isTransfer = categoriser.detectTransfer({
             amount: tx.amount,
             descriptionRaw: tx.descriptionRaw,
             merchantName: tx.merchantName
           });
+
+          // Compute inbox state using state machine
+          let modelPrediction = null;
+          if (!ruleResult.matched && model) {
+            const features = extractFeatures({
+              merchantNormalised: tx.merchantName,
+              descriptionRaw: tx.descriptionRaw,
+              amount: tx.amount,
+              accountId: tx.accountName,
+              date: safeParseIsoDate(tx.date, now)
+            });
+            const pred = predictWithModel(model, features);
+            modelPrediction = {
+              category: pred.category,
+              categoryType: "", // We don't store categoryType in model
+              confidence: pred.confidence
+            };
+          }
+
+          const inboxResult = computeInboxState({
+            ruleMatch: ruleResult.matched
+              ? { category: ruleResult.category, categoryType: ruleResult.categoryType, confidence: 1.0, source: "rule" as const }
+              : null,
+            modelPrediction,
+            threshold: user.modelAutoThreshold
+          });
+
           const date = safeParseIsoDate(tx.date, now);
           return prisma.transaction.upsert({
             where: { userId_akahuId: { userId: user.id, akahuId: tx.id } },
@@ -109,11 +145,15 @@ export async function pipelineRoutes(app: FastifyInstance) {
               balance: tx.balance,
               descriptionRaw: tx.descriptionRaw,
               merchantName: tx.merchantName,
-              category,
-              categoryType,
+              category: inboxResult.category,
+              categoryType: inboxResult.categoryType,
               isTransfer,
               source: tx.source,
-              importedAt: now
+              importedAt: now,
+              inboxState: inboxResult.inboxState,
+              classificationSource: inboxResult.classificationSource,
+              suggestedCategoryId: inboxResult.suggestedCategoryId,
+              confidence: inboxResult.confidence
             },
             create: {
               userId: user.id,
@@ -124,11 +164,15 @@ export async function pipelineRoutes(app: FastifyInstance) {
               balance: tx.balance,
               descriptionRaw: tx.descriptionRaw,
               merchantName: tx.merchantName,
-              category,
-              categoryType,
+              category: inboxResult.category,
+              categoryType: inboxResult.categoryType,
               isTransfer,
               source: tx.source,
-              importedAt: now
+              importedAt: now,
+              inboxState: inboxResult.inboxState,
+              classificationSource: inboxResult.classificationSource,
+              suggestedCategoryId: inboxResult.suggestedCategoryId,
+              confidence: inboxResult.confidence
             }
           });
         });
@@ -215,6 +259,17 @@ export async function pipelineRoutes(app: FastifyInstance) {
             }
           });
         }
+      }
+
+      // Train model if needed
+      const { shouldRetrainModel, trainModelForUser } = await import("../ml/service.js");
+      try {
+        if (await shouldRetrainModel(user.id)) {
+          await trainModelForUser(user.id);
+          warnings.push("Model retrained with new confirmed labels");
+        }
+      } catch (err) {
+        warnings.push(`Model training skipped: ${err instanceof Error ? err.message : String(err)}`);
       }
 
       reply.send({
