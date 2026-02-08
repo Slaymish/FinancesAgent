@@ -28,7 +28,7 @@ export function InboxList({ transactions, userId }: InboxListProps) {
     setConfirming(txId);
 
     try {
-      const res = await fetch(`/api/inbox/${txId}/confirm`, {
+      const res = await fetch(`/api/inbox/${txId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ categoryId })
@@ -38,7 +38,11 @@ export function InboxList({ transactions, userId }: InboxListProps) {
         // Remove from list
         setItems((prev) => prev.filter((item) => item.id !== txId));
       } else {
-        alert("Failed to confirm transaction");
+        const message = await res
+          .json()
+          .then((body) => body?.error as string | undefined)
+          .catch(() => undefined);
+        alert(`Failed to confirm transaction (${res.status}${message ? `: ${message}` : ""})`);
       }
     } catch (error) {
       alert("Failed to confirm transaction");
