@@ -2,13 +2,11 @@ import type { FastifyInstance } from "fastify";
 import { prisma } from "../prisma.js";
 import { loadEnv } from "../env.js";
 import { requireUserFromInternalRequest } from "../auth.js";
-import { computeInboxState } from "../ml/inboxState.js";
-import { extractFeatures } from "../ml/index.js";
-import { predict as predictWithModel } from "../ml/model.js";
 import {
-  getFallbackSuggestedCategory,
-  loadModelForUser,
-  retrainModelForUserIfNeeded
+  getPredictionContextForUser,
+  predictCategoryWithContext,
+  reclassifyTransactionsForUser,
+  retrainAndReclassifyIfNeeded
 } from "../ml/service.js";
 
 export async function inboxRoutes(app: FastifyInstance) {
@@ -26,7 +24,7 @@ export async function inboxRoutes(app: FastifyInstance) {
     const perPage = Math.min(parseInt(query.perPage || "50", 10), 100);
     const skip = (page - 1) * perPage;
 
-    const [transactions, total, model] = await Promise.all([
+    const [transactions, total, predictionContext] = await Promise.all([
       prisma.transaction.findMany({
         where: {
           userId: user.id,
@@ -42,40 +40,34 @@ export async function inboxRoutes(app: FastifyInstance) {
           inboxState: { in: ["needs_review", "unclassified"] }
         }
       }),
-      loadModelForUser(user.id)
+      getPredictionContextForUser(user.id)
     ]);
 
-    const fallbackSuggestedCategory = model ? null : await getFallbackSuggestedCategory(user.id);
     const suggestedTransactions = transactions.map((tx) => {
       if (tx.suggestedCategoryId) {
         return tx;
       }
 
-      if (model) {
-        const features = extractFeatures({
-          merchantNormalised: tx.merchantName,
-          descriptionRaw: tx.descriptionRaw,
-          amount: tx.amount,
-          accountId: tx.accountName,
-          date: tx.date
-        });
-        const pred = predictWithModel(model, features);
+      const prediction = predictCategoryWithContext(predictionContext, {
+        merchantNormalised: tx.merchantName,
+        descriptionRaw: tx.descriptionRaw,
+        amount: tx.amount,
+        accountId: tx.accountName,
+        date: tx.date
+      });
+      if (prediction) {
         return {
           ...tx,
-          suggestedCategoryId: pred.category,
-          confidence: pred.confidence
+          suggestedCategoryId: prediction.category,
+          confidence: prediction.confidence
         };
       }
 
-      if (fallbackSuggestedCategory) {
-        return {
-          ...tx,
-          suggestedCategoryId: fallbackSuggestedCategory,
-          confidence: 0
-        };
-      }
-
-      return tx;
+      return {
+        ...tx,
+        suggestedCategoryId: "Uncategorised",
+        confidence: tx.confidence ?? 0
+      };
     });
 
     reply.send({
@@ -133,10 +125,16 @@ export async function inboxRoutes(app: FastifyInstance) {
     });
 
     let modelRetrained = false;
+    let reclassified = 0;
     let warning: string | undefined;
 
     try {
-      modelRetrained = await retrainModelForUserIfNeeded(user.id);
+      const result = await retrainAndReclassifyIfNeeded({
+        userId: user.id,
+        threshold: user.modelAutoThreshold
+      });
+      modelRetrained = result.retrained;
+      reclassified = result.reclassified;
     } catch (error) {
       req.log.warn({ err: error, userId: user.id }, "inbox_confirm_retrain_failed");
       warning = "model_retrain_failed";
@@ -146,6 +144,7 @@ export async function inboxRoutes(app: FastifyInstance) {
       ok: true,
       transaction: updated,
       modelRetrained,
+      reclassified,
       ...(warning ? { warning } : {})
     });
   });
@@ -246,85 +245,15 @@ export async function inboxRoutes(app: FastifyInstance) {
 
     const body = req.body as { startDate?: string; endDate?: string };
 
-    // Build date filter
-    type DateFilter = { gte?: Date; lte?: Date };
-    const dateFilter: DateFilter = {};
-    if (body.startDate) {
-      dateFilter.gte = new Date(body.startDate);
-    }
-    if (body.endDate) {
-      dateFilter.lte = new Date(body.endDate);
-    }
+    const startDate = body.startDate ? new Date(body.startDate) : undefined;
+    const endDate = body.endDate ? new Date(body.endDate) : undefined;
 
-    // Get transactions to reprocess
-    const transactions = await prisma.transaction.findMany({
-      where: {
-        userId: user.id,
-        ...(Object.keys(dateFilter).length > 0 ? { date: dateFilter } : {})
-      },
-      select: {
-        id: true,
-        amount: true,
-        descriptionRaw: true,
-        merchantName: true,
-        accountName: true,
-        date: true
-      }
+    const reprocessed = await reclassifyTransactionsForUser({
+      userId: user.id,
+      threshold: user.modelAutoThreshold,
+      options: { startDate, endDate }
     });
 
-    // Load model (or fallback suggestion category when model is unavailable)
-    const model = await loadModelForUser(user.id);
-    const fallbackSuggestedCategory = model ? null : await getFallbackSuggestedCategory(user.id);
-
-    // Reprocess each transaction
-    const updates = transactions.map((tx) => {
-      // Compute inbox state
-      let modelPrediction = null;
-      if (model) {
-        const features = extractFeatures({
-          merchantNormalised: tx.merchantName,
-          descriptionRaw: tx.descriptionRaw,
-          amount: tx.amount,
-          accountId: tx.accountName,
-          date: tx.date
-        });
-        const pred = predictWithModel(model, features);
-        modelPrediction = {
-          category: pred.category,
-          categoryType: "",
-          confidence: pred.confidence
-        };
-      } else if (fallbackSuggestedCategory) {
-        modelPrediction = {
-          category: fallbackSuggestedCategory,
-          categoryType: "",
-          confidence: 0
-        };
-      }
-
-      const inboxResult = computeInboxState({
-        modelPrediction,
-        threshold: user.modelAutoThreshold
-      });
-
-      return prisma.transaction.update({
-        where: { id: tx.id },
-        data: {
-          category: inboxResult.category,
-          categoryType: inboxResult.categoryType,
-          inboxState: inboxResult.inboxState,
-          classificationSource: inboxResult.classificationSource,
-          suggestedCategoryId: inboxResult.suggestedCategoryId,
-          confidence: inboxResult.confidence
-        }
-      });
-    });
-
-    // Execute in batches
-    for (let i = 0; i < updates.length; i += 100) {
-      await prisma.$transaction(updates.slice(i, i + 100));
-    }
-
-    reply.send({ ok: true, reprocessed: updates.length });
+    reply.send({ ok: true, reprocessed });
   });
 }

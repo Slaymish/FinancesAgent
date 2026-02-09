@@ -35,24 +35,22 @@ Every transaction has exactly one inbox state:
 Transaction processing:
 
 1. **Model prediction** (ML-assisted)
-   - Extract features (merchant, description tokens, amount bucket, direction, account)
-   - Predict with user's trained model
+   - Extract rich features (merchant signals, token n-grams, amount patterns, account + time context)
+   - Predict with a hybrid model (linear softmax + learned lookup evidence)
    - If confidence ≥ threshold → auto_classified
    - If confidence < threshold → needs_review with suggestion
 2. **No model available yet**
-   - Suggestion defaults to `Uncategorised`
+   - Suggestion falls back to the user's most common confirmed category, or `Uncategorised`
+3. **Transfer handling**
+   - Opposite-side transfer pairing is detected across accounts (amount/date/reference matching)
+   - Detected transfers are auto-marked and excluded from spend metrics
 
 ### Model Training
 
 - **Training data**: Only transactions with `categoryConfirmed=true` (user explicitly confirmed)
-- **Trigger**: Automatic after user category confirmations/edits, and also periodically during pipeline runs
-- **Algorithm**: Multinomial logistic regression with L2 regularization
-- **Features**: Feature hashing (4096 dimensions) of:
-  - Merchant name (normalized)
-  - Description tokens (lowercase)
-  - Amount bucket (tiny/small/medium/large/huge)
-  - Direction (in/out)
-  - Account ID
+- **Trigger**: Automatic after user category confirmations/edits, with periodic staleness retraining and full reclassification during pipeline runs
+- **Algorithm**: Weighted multinomial logistic regression (with class balancing + recency weighting) blended with lookup-based signal evidence
+- **Features**: Hashed sparse features (8192 dimensions) including merchant normalization, tokens/bigrams, character n-grams, amount buckets, rounded amounts, direction, account, and temporal features
 - **Storage**: Model weights stored as JSON in `category_models` table per user
 
 ### Gamification

@@ -4,11 +4,17 @@ import { prisma } from "../prisma.js";
 import { loadEnv } from "../env.js";
 import { requireUserFromInternalRequest } from "../auth.js";
 import { AkahuClient } from "../akahu/client.js";
-import { buildCategoriser } from "../akahu/categoriser.js";
 import { computeMetricsPack } from "../finance/metrics.js";
 import { sanitizeInsightsMarkdown } from "../insights/sanitize.js";
 import { generateInsightsUnifiedDiff } from "../insights/llm.js";
 import { applyUnifiedDiff } from "../insights/patch.js";
+import { computeInboxState } from "../ml/inboxState.js";
+import {
+  getPredictionContextForUser,
+  predictCategoryWithContext,
+  reclassifyTransactionsForUser,
+  retrainModelForUserIfNeeded
+} from "../ml/service.js";
 
 function subtractMs(date: Date, ms: number): Date {
   return new Date(date.getTime() - ms);
@@ -80,55 +86,32 @@ export async function pipelineRoutes(app: FastifyInstance) {
         );
       }
 
-      // Load model for predictions
-      const { loadModelForUser, getFallbackSuggestedCategory } = await import("../ml/service.js");
-      const { computeInboxState } = await import("../ml/inboxState.js");
-      const { extractFeatures } = await import("../ml/index.js");
-      const { predict: predictWithModel } = await import("../ml/model.js");
-      
-      const model = await loadModelForUser(user.id);
-      const fallbackSuggestedCategory = model ? null : await getFallbackSuggestedCategory(user.id);
-      const transferDetector = buildCategoriser([]);
+      const predictionContext = await getPredictionContextForUser(user.id);
 
       const transactions = await client.fetchSettledTransactions({ start, end: now });
       if (transactions.length > 0) {
         const operations = transactions.map((tx) => {
-          const isTransfer = transferDetector.detectTransfer({
-            amount: tx.amount,
+          const date = safeParseIsoDate(tx.date, now);
+          const prediction = predictCategoryWithContext(predictionContext, {
+            merchantNormalised: tx.merchantName,
             descriptionRaw: tx.descriptionRaw,
-            merchantName: tx.merchantName
+            amount: tx.amount,
+            accountId: tx.accountName,
+            date
           });
-
-          // Compute inbox state using state machine
-          let modelPrediction = null;
-          if (model) {
-            const features = extractFeatures({
-              merchantNormalised: tx.merchantName,
-              descriptionRaw: tx.descriptionRaw,
-              amount: tx.amount,
-              accountId: tx.accountName,
-              date: safeParseIsoDate(tx.date, now)
-            });
-            const pred = predictWithModel(model, features);
-            modelPrediction = {
-              category: pred.category,
-              categoryType: "", // We don't store categoryType in model
-              confidence: pred.confidence
-            };
-          } else if (fallbackSuggestedCategory) {
-            modelPrediction = {
-              category: fallbackSuggestedCategory,
-              categoryType: "",
-              confidence: 0
-            };
-          }
+          const modelPrediction = prediction
+            ? {
+                category: prediction.category,
+                categoryType: "",
+                confidence: prediction.confidence
+              }
+            : null;
 
           const inboxResult = computeInboxState({
             modelPrediction,
             threshold: user.modelAutoThreshold
           });
 
-          const date = safeParseIsoDate(tx.date, now);
           return prisma.transaction.upsert({
             where: { userId_akahuId: { userId: user.id, akahuId: tx.id } },
             update: {
@@ -138,15 +121,8 @@ export async function pipelineRoutes(app: FastifyInstance) {
               balance: tx.balance,
               descriptionRaw: tx.descriptionRaw,
               merchantName: tx.merchantName,
-              category: inboxResult.category,
-              categoryType: inboxResult.categoryType,
-              isTransfer,
               source: tx.source,
-              importedAt: now,
-              inboxState: inboxResult.inboxState,
-              classificationSource: inboxResult.classificationSource,
-              suggestedCategoryId: inboxResult.suggestedCategoryId,
-              confidence: inboxResult.confidence
+              importedAt: now
             },
             create: {
               userId: user.id,
@@ -159,7 +135,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
               merchantName: tx.merchantName,
               category: inboxResult.category,
               categoryType: inboxResult.categoryType,
-              isTransfer,
+              isTransfer: false,
               source: tx.source,
               importedAt: now,
               inboxState: inboxResult.inboxState,
@@ -178,6 +154,29 @@ export async function pipelineRoutes(app: FastifyInstance) {
         update: { lastSyncedAt: now },
         create: { userId: user.id, lastSyncedAt: now }
       });
+
+      const warnings: string[] = [];
+
+      // Keep model and predictions fresh on every pipeline run.
+      try {
+        if (await retrainModelForUserIfNeeded(user.id)) {
+          warnings.push("Model retrained");
+        }
+      } catch (err) {
+        warnings.push(`Model training skipped: ${err instanceof Error ? err.message : String(err)}`);
+      }
+
+      try {
+        const refreshed = await reclassifyTransactionsForUser({
+          userId: user.id,
+          threshold: user.modelAutoThreshold
+        });
+        if (refreshed > 0) {
+          warnings.push(`Reclassified ${refreshed} transaction(s)`);
+        }
+      } catch (err) {
+        warnings.push(`Reclassification skipped: ${err instanceof Error ? err.message : String(err)}`);
+      }
 
       const metricsStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11, 1));
       const metricTransactions = await prisma.transaction.findMany({
@@ -199,8 +198,6 @@ export async function pipelineRoutes(app: FastifyInstance) {
           processedCount: transactions.length
         }
       });
-
-      const warnings: string[] = [];
 
       if (env.INSIGHTS_ENABLED) {
         const prev = await prisma.insightsDoc.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "desc" } });
@@ -252,16 +249,6 @@ export async function pipelineRoutes(app: FastifyInstance) {
             }
           });
         }
-      }
-
-      // Train model if needed
-      const { retrainModelForUserIfNeeded } = await import("../ml/service.js");
-      try {
-        if (await retrainModelForUserIfNeeded(user.id)) {
-          warnings.push("Model retrained");
-        }
-      } catch (err) {
-        warnings.push(`Model training skipped: ${err instanceof Error ? err.message : String(err)}`);
       }
 
       reply.send({

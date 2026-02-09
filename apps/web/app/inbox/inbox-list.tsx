@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatCurrency, formatDateTime } from "../lib/format";
 
 type Transaction = {
@@ -17,13 +17,42 @@ type Transaction = {
 
 type InboxListProps = {
   transactions: Transaction[];
+  knownCategories: string[];
 };
 
-export function InboxList({ transactions }: InboxListProps) {
+function preferredCategory(tx: Transaction): string {
+  return tx.suggestedCategoryId?.trim() || tx.category?.trim() || "Uncategorised";
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b));
+}
+
+export function InboxList({ transactions, knownCategories }: InboxListProps) {
   const [items, setItems] = useState(transactions);
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [draftById, setDraftById] = useState<Record<string, string>>(() =>
+    Object.fromEntries(transactions.map((tx) => [tx.id, preferredCategory(tx)]))
+  );
 
-  const handleConfirm = async (txId: string, categoryId: string) => {
+  useEffect(() => {
+    setItems(transactions);
+    setDraftById(Object.fromEntries(transactions.map((tx) => [tx.id, preferredCategory(tx)])));
+  }, [transactions]);
+
+  const categoryOptions = useMemo(
+    () =>
+      uniqueSorted([
+        "Uncategorised",
+        ...knownCategories,
+        ...items.map((tx) => tx.category),
+        ...items.map((tx) => tx.suggestedCategoryId ?? "")
+      ]),
+    [items, knownCategories]
+  );
+
+  const handleConfirm = async (txId: string) => {
+    const categoryId = (draftById[txId] ?? "").trim() || "Uncategorised";
     setConfirming(txId);
 
     try {
@@ -63,6 +92,7 @@ export function InboxList({ transactions }: InboxListProps) {
     <div className="inbox-list">
       {items.map((tx) => {
         const suggestedCategory = tx.suggestedCategoryId ?? "Uncategorised";
+        const draft = draftById[tx.id] ?? suggestedCategory;
 
         return (
           <div key={tx.id} className="inbox-item">
@@ -78,26 +108,29 @@ export function InboxList({ transactions }: InboxListProps) {
             <div className="inbox-item-actions">
               <div className="inbox-item-suggestion">
                 <div className="muted">Suggested: {suggestedCategory}</div>
-                {tx.confidence !== null && (
-                  <div className="muted">Confidence: {Math.round(tx.confidence * 100)}%</div>
-                )}
+                <input
+                  className="input"
+                  value={draft}
+                  list={`inbox-category-options-${tx.id}`}
+                  onChange={(event) =>
+                    setDraftById((prev) => ({
+                      ...prev,
+                      [tx.id]: event.target.value
+                    }))
+                  }
+                />
+                <datalist id={`inbox-category-options-${tx.id}`}>
+                  {categoryOptions.map((category) => (
+                    <option key={category} value={category} />
+                  ))}
+                </datalist>
                 <div className="button-group">
                   <button
                     className="btn btn-primary btn-sm"
-                    onClick={() => handleConfirm(tx.id, suggestedCategory)}
+                    onClick={() => handleConfirm(tx.id)}
                     disabled={confirming === tx.id}
                   >
-                    {confirming === tx.id ? "..." : "✓ Confirm"}
-                  </button>
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => {
-                      const category = prompt("Enter category:");
-                      if (category) handleConfirm(tx.id, category);
-                    }}
-                    disabled={confirming === tx.id}
-                  >
-                    Pick Different
+                    {confirming === tx.id ? "..." : "Confirm"}
                   </button>
                 </div>
               </div>

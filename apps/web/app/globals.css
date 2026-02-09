@@ -403,6 +403,7 @@ img {
   display: grid;
   justify-items: end;
   gap: 6px;
+  min-width: 220px;
 }
 
 .button-group {

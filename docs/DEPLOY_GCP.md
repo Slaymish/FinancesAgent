@@ -54,6 +54,7 @@ gcloud scheduler jobs create http finance-agent-daily-pipeline \
 
 - Prefer Secret Manager for secrets.
 - `INTERNAL_API_KEY` and `PIPELINE_TOKEN` are required; do not deploy with default/dev values.
+- Web and API must use the same `INTERNAL_API_KEY` value. If API reads from Secret Manager, set the web app env var to that same secret value.
 - Web on Vercel must also have `DATABASE_URL` (and ideally `DATABASE_DIRECT_URL`) so Prisma migrations can run during build.
 - Set `NEXTAUTH_URL` to the exact public web origin (for example `https://app.example.com`) to avoid OAuth state-cookie callback errors.
 - Web build now runs `prisma migrate deploy` automatically before `next build`.

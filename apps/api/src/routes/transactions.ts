@@ -3,7 +3,7 @@ import { prisma } from "../prisma.js";
 import { loadEnv } from "../env.js";
 import { requireUserFromInternalRequest } from "../auth.js";
 import { computeMetricsPack } from "../finance/metrics.js";
-import { retrainModelForUserIfNeeded } from "../ml/service.js";
+import { retrainAndReclassifyIfNeeded } from "../ml/service.js";
 
 type CategorySummary = {
   category: string;
@@ -163,9 +163,15 @@ export async function transactionRoutes(app: FastifyInstance) {
     });
 
     let modelRetrained = false;
+    let reclassified = 0;
     let warning: string | undefined;
     try {
-      modelRetrained = await retrainModelForUserIfNeeded(user.id);
+      const result = await retrainAndReclassifyIfNeeded({
+        userId: user.id,
+        threshold: user.modelAutoThreshold
+      });
+      modelRetrained = result.retrained;
+      reclassified = result.reclassified;
     } catch (error) {
       req.log.warn({ err: error, userId: user.id }, "transaction_category_retrain_failed");
       warning = "model_retrain_failed";
@@ -175,6 +181,7 @@ export async function transactionRoutes(app: FastifyInstance) {
       ok: true,
       transaction,
       modelRetrained,
+      reclassified,
       ...(warning ? { warning } : {})
     });
   });

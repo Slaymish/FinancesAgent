@@ -30,13 +30,19 @@ type InboxStatsResponse = {
   autoClassifiedPercent: number;
 };
 
+type CategoriesResponse = {
+  ok: boolean;
+  categories: Array<{ category: string }>;
+};
+
 async function getInboxData(session: Session | null) {
   if (!session?.user?.id) return { data: null, errorStatus: 401 };
 
   try {
-    const [transactionsRes, statsRes] = await Promise.all([
+    const [transactionsRes, statsRes, categoriesRes] = await Promise.all([
       fetchUserApi<InboxResponse>(session, "/api/inbox"),
-      fetchUserApi<InboxStatsResponse>(session, "/api/inbox/stats")
+      fetchUserApi<InboxStatsResponse>(session, "/api/inbox/stats"),
+      fetchUserApi<CategoriesResponse>(session, "/api/transactions/categories?limit=1")
     ]);
 
     if (!transactionsRes.ok || !transactionsRes.data) {
@@ -46,8 +52,13 @@ async function getInboxData(session: Session | null) {
       return { data: null, errorStatus: statsRes.status };
     }
 
+    const knownCategories =
+      categoriesRes.ok && categoriesRes.data
+        ? categoriesRes.data.categories.map((row) => row.category)
+        : [];
+
     return {
-      data: { transactions: transactionsRes.data, stats: statsRes.data },
+      data: { transactions: transactionsRes.data, stats: statsRes.data, knownCategories },
       errorStatus: undefined
     };
   } catch (error) {
@@ -83,7 +94,7 @@ export default async function InboxPage() {
     );
   }
 
-  const { transactions, stats } = data;
+  const { transactions, stats, knownCategories } = data;
 
   return (
     <div className="section">
@@ -97,7 +108,7 @@ export default async function InboxPage() {
 
       <Card title="Transactions to Review">
         {transactions.transactions && transactions.transactions.length > 0 ? (
-          <InboxList transactions={transactions.transactions} />
+          <InboxList transactions={transactions.transactions} knownCategories={knownCategories} />
         ) : (
           <div className="empty-state">
             <p>🎉 Your inbox is clear!</p>
