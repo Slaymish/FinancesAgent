@@ -25,7 +25,7 @@ public enum FinanceAgentAPIError: Error, Equatable {
     case decodeFailed
 }
 
-public struct FinanceAgentAPI {
+public struct FinanceAgentAPI: @unchecked Sendable {
     public let configuration: FinanceAgentAPIConfiguration
     private let session: URLSession
 

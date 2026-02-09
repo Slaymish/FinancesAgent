@@ -20,12 +20,20 @@
   - `fetchInboxStats()`
   - `confirmInboxTransaction(id:categoryId:categoryType:)`
 - Added `InboxNotificationCounter` helper for "new transactions since last marker" logic
+- Added inbox refresh pipeline in `Sources/ios/InboxSyncService.swift`
+  - `InboxSyncService` fetches inbox + stats concurrently
+  - Persists last-seen imported marker
+  - Returns `newToClassifyCount` for notifications
+- Added notification scaffolding in `Sources/ios/InboxNotifications.swift`
+  - Cross-platform payload builder
+  - iOS `UNUserNotificationCenter` scheduler implementation
+- Added coordinator in `Sources/ios/InboxRefreshCoordinator.swift` to connect refresh + notifications
+- Added iOS-only SwiftUI dashboard view scaffold in `Sources/ios/InboxDashboardView.swift`
 - Added tests in `Tests/iosTests/iosTests.swift` for decoding + notification count behavior
 
 ## Next build target
 
-- Add SwiftUI app shell with:
-  - Inbox list view (pulling from `FinanceAgentAPI`)
-  - Swipe actions for confirm/category
-  - Streak + stats cards
-  - Local persisted marker + daily local notification scheduling for new-to-clear transactions
+- Add an `App` target (Xcode project) that wires:
+  - Auth/session source into `FinanceAgentAPIConfiguration`
+  - `InboxRefreshCoordinator` into app lifecycle refreshes
+  - `InboxDashboardView` with confirm actions and refresh state
