@@ -20,7 +20,8 @@ const TRANSFER_HINTS = [
   "own account",
   "payment to self",
   "internal",
-  "sweep"
+  "sweep",
+  "sharesies"
 ];
 
 const NON_TRANSFER_HINTS = ["eftpos", "card", "visa", "mastercard", "apple", "google pay", "atm fee"];

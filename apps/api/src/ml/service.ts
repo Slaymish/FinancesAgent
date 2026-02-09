@@ -91,7 +91,7 @@ export async function shouldRetrainModel(userId: string): Promise<boolean> {
   }
 
   const modelAgeMs = Date.now() - latestModel.updatedAt.getTime();
-  if (modelAgeMs < MAX_MODEL_STALENESS_MS) {
+  if (modelAgeMs < MAX_MODEL_STALENESS_MS) { // daily
     return false;
   }
 
