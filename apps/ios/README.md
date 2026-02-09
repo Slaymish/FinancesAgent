@@ -11,3 +11,21 @@
 ## Current ios codebase
 
 - Used `swift package init` in `apps/ios/`
+
+## Implemented in this pass
+
+- Added typed inbox API models in `Sources/ios/Models.swift`
+- Added `FinanceAgentAPI` networking client in `Sources/ios/FinanceAgentAPI.swift`
+  - `fetchInbox(page:perPage:)`
+  - `fetchInboxStats()`
+  - `confirmInboxTransaction(id:categoryId:categoryType:)`
+- Added `InboxNotificationCounter` helper for "new transactions since last marker" logic
+- Added tests in `Tests/iosTests/iosTests.swift` for decoding + notification count behavior
+
+## Next build target
+
+- Add SwiftUI app shell with:
+  - Inbox list view (pulling from `FinanceAgentAPI`)
+  - Swipe actions for confirm/category
+  - Streak + stats cards
+  - Local persisted marker + daily local notification scheduling for new-to-clear transactions
