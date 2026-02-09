@@ -35,11 +35,14 @@
 - Added app-facing SwiftUI view model in `Sources/ios/InboxAppViewModel.swift`
 - Added `FinanceAgentRootView` setup + inbox runtime wiring in `Sources/ios/FinanceAgentRootView.swift`
 - Added iOS-only SwiftUI inbox dashboard with category editing + optimistic confirm in `Sources/ios/InboxDashboardView.swift`
+- Added `LiquidGlassStyle` helper modifiers in `Sources/ios/LiquidGlassStyle.swift`
+  - Uses SwiftUI Liquid Glass on iOS 26+
+  - Falls back to material cards on earlier iOS
 - Added Xcode app entry template in `AppTemplate/FinanceAgentPhoneApp.swift`
-- Added Xcode/TestFlight/sideload guide in `XCODE_BUILD_AND_DISTRIBUTE.md`
+- Added free-Apple-ID sideload guide in `XCODE_BUILD_AND_DISTRIBUTE.md`
 - Added tests in `Tests/iosTests/iosTests.swift` for decoding, refresh behavior, and notification policy
 
 ## Next build target
 
 - On Mac, create/open the iOS app target in Xcode and drop in `AppTemplate/FinanceAgentPhoneApp.swift`.
-- Follow `XCODE_BUILD_AND_DISTRIBUTE.md` for signing, install on device, and TestFlight internal distribution.
+- Follow `XCODE_BUILD_AND_DISTRIBUTE.md` for free provisioning signing and install on device.

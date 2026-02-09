@@ -78,7 +78,7 @@ public struct InboxDashboardView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(20)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .financeAgentGlassCard(cornerRadius: 16)
     }
 
     private var emptyState: some View {
@@ -91,7 +91,7 @@ public struct InboxDashboardView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(20)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .financeAgentGlassCard(cornerRadius: 16)
     }
 
     private var transactionList: some View {
@@ -162,11 +162,7 @@ public struct InboxDashboardView: View {
             }
         }
         .padding(14)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.4), lineWidth: 0.6)
-        )
+        .financeAgentGlassCard(cornerRadius: 16, strokeOpacity: 0.4)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button("Confirm") {
                 Task {
@@ -188,11 +184,7 @@ public struct InboxDashboardView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.35), lineWidth: 0.6)
-        )
+        .financeAgentGlassCard(cornerRadius: 14)
     }
 }
 #endif

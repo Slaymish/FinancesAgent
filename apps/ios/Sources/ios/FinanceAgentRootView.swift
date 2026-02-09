@@ -107,7 +107,7 @@ public struct FinanceAgentRootView: View {
                         Image(systemName: "slider.horizontal.3")
                             .font(.headline)
                             .padding(14)
-                            .background(.thinMaterial, in: Circle())
+                            .financeAgentGlassCircle()
                     }
                     .padding()
                 }
