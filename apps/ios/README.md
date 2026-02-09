@@ -18,6 +18,7 @@
 - Added `FinanceAgentAPI` networking client in `Sources/ios/FinanceAgentAPI.swift`
   - `fetchInbox(page:perPage:)`
   - `fetchInboxStats()`
+  - `fetchTransactionCategories()`
   - `confirmInboxTransaction(id:categoryId:categoryType:)`
 - Added `InboxNotificationCounter` helper for "new transactions since last marker" logic
 - Added inbox refresh pipeline in `Sources/ios/InboxSyncService.swift`
@@ -27,13 +28,18 @@
 - Added notification scaffolding in `Sources/ios/InboxNotifications.swift`
   - Cross-platform payload builder
   - iOS `UNUserNotificationCenter` scheduler implementation
-- Added coordinator in `Sources/ios/InboxRefreshCoordinator.swift` to connect refresh + notifications
-- Added iOS-only SwiftUI dashboard view scaffold in `Sources/ios/InboxDashboardView.swift`
-- Added tests in `Tests/iosTests/iosTests.swift` for decoding + notification count behavior
+- Added refresh-state policy store so notifications only fire when new-to-classify count increases from prior refresh
+- Added coordinator in `Sources/ios/InboxRefreshCoordinator.swift` to connect refresh + notifications + policy state
+- Added background refresh manager scaffold in `Sources/ios/InboxBackgroundRefresh.swift`
+- Added persisted mobile session model/store in `Sources/ios/MobileSession.swift`
+- Added app-facing SwiftUI view model in `Sources/ios/InboxAppViewModel.swift`
+- Added `FinanceAgentRootView` setup + inbox runtime wiring in `Sources/ios/FinanceAgentRootView.swift`
+- Added iOS-only SwiftUI inbox dashboard with category editing + optimistic confirm in `Sources/ios/InboxDashboardView.swift`
+- Added Xcode app entry template in `AppTemplate/FinanceAgentPhoneApp.swift`
+- Added Xcode/TestFlight/sideload guide in `XCODE_BUILD_AND_DISTRIBUTE.md`
+- Added tests in `Tests/iosTests/iosTests.swift` for decoding, refresh behavior, and notification policy
 
 ## Next build target
 
-- Add an `App` target (Xcode project) that wires:
-  - Auth/session source into `FinanceAgentAPIConfiguration`
-  - `InboxRefreshCoordinator` into app lifecycle refreshes
-  - `InboxDashboardView` with confirm actions and refresh state
+- On Mac, create/open the iOS app target in Xcode and drop in `AppTemplate/FinanceAgentPhoneApp.swift`.
+- Follow `XCODE_BUILD_AND_DISTRIBUTE.md` for signing, install on device, and TestFlight internal distribution.

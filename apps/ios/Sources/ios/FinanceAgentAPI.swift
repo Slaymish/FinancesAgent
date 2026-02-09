@@ -56,6 +56,11 @@ public struct FinanceAgentAPI: @unchecked Sendable {
         return try await execute(request, decodeAs: InboxStatsResponse.self)
     }
 
+    public func fetchTransactionCategories() async throws -> TransactionCategoriesResponse {
+        let request = try makeRequest(path: "/api/transactions/categories?limit=1", method: "GET")
+        return try await execute(request, decodeAs: TransactionCategoriesResponse.self)
+    }
+
     public func confirmInboxTransaction(
         id: String,
         categoryId: String,

@@ -221,10 +221,60 @@ actor RecordingScheduler: InboxNotificationScheduling {
     let markerStore = InMemoryInboxMarkerStore()
     let service = InboxSyncService(provider: provider, markerStore: markerStore, now: { now })
     let scheduler = RecordingScheduler()
-    let coordinator = InboxRefreshCoordinator(syncService: service, scheduler: scheduler)
+    let refreshStateStore = InMemoryInboxRefreshStateStore(initialLastObservedNewCount: 0)
+    let coordinator = InboxRefreshCoordinator(
+        syncService: service,
+        scheduler: scheduler,
+        refreshStateStore: refreshStateStore
+    )
 
     _ = try await coordinator.refresh()
 
     let receivedCount = await scheduler.readLastCount()
     #expect(receivedCount == 1)
+
+    let observedCount = await refreshStateStore.loadLastObservedNewCount()
+    #expect(observedCount == 1)
+}
+
+@Test func refreshCoordinatorSkipsNotificationWhenNewCountDoesNotIncrease() async throws {
+    let now = Date(timeIntervalSince1970: 1_700_001_000)
+    let tx = InboxTransaction(
+        id: "t1",
+        date: now,
+        merchantName: "A",
+        descriptionRaw: "A",
+        amount: -10,
+        category: "Groceries",
+        inboxState: "needs_review",
+        suggestedCategoryId: nil,
+        confidence: nil,
+        importedAt: now
+    )
+
+    let provider = StubInboxProvider(
+        inbox: InboxResponse(
+            ok: true,
+            transactions: [tx],
+            pagination: InboxPagination(page: 1, perPage: 50, total: 1, totalPages: 1)
+        ),
+        stats: InboxStatsResponse(ok: true, toClearCount: 1, streak: 0, autoClassifiedPercent: 0)
+    )
+    let markerStore = InMemoryInboxMarkerStore()
+    let service = InboxSyncService(provider: provider, markerStore: markerStore, now: { now })
+    let scheduler = RecordingScheduler()
+    let refreshStateStore = InMemoryInboxRefreshStateStore(initialLastObservedNewCount: 2)
+    let coordinator = InboxRefreshCoordinator(
+        syncService: service,
+        scheduler: scheduler,
+        refreshStateStore: refreshStateStore
+    )
+
+    _ = try await coordinator.refresh()
+
+    let receivedCount = await scheduler.readLastCount()
+    #expect(receivedCount == nil)
+
+    let observedCount = await refreshStateStore.loadLastObservedNewCount()
+    #expect(observedCount == 1)
 }

@@ -4,6 +4,45 @@ public protocol InboxNotificationScheduling: Sendable {
     func scheduleDailySummary(newToClassifyCount: Int) async throws
 }
 
+public protocol InboxRefreshStateStoring: Sendable {
+    func loadLastObservedNewCount() async -> Int
+    func saveLastObservedNewCount(_ count: Int) async
+}
+
+public actor InMemoryInboxRefreshStateStore: InboxRefreshStateStoring {
+    private var lastObservedNewCount: Int
+
+    public init(initialLastObservedNewCount: Int = 0) {
+        self.lastObservedNewCount = initialLastObservedNewCount
+    }
+
+    public func loadLastObservedNewCount() async -> Int {
+        lastObservedNewCount
+    }
+
+    public func saveLastObservedNewCount(_ count: Int) async {
+        lastObservedNewCount = count
+    }
+}
+
+public actor UserDefaultsInboxRefreshStateStore: InboxRefreshStateStoring {
+    private let defaults: UserDefaults
+    private let key: String
+
+    public init(defaults: UserDefaults = .standard, key: String = "finance_agent.inbox_last_observed_new_count") {
+        self.defaults = defaults
+        self.key = key
+    }
+
+    public func loadLastObservedNewCount() async -> Int {
+        defaults.integer(forKey: key)
+    }
+
+    public func saveLastObservedNewCount(_ count: Int) async {
+        defaults.set(count, forKey: key)
+    }
+}
+
 public struct InboxNotificationPayload: Sendable {
     public let title: String
     public let body: String

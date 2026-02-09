@@ -67,6 +67,19 @@ public struct InboxStatsResponse: Codable, Sendable {
     public let autoClassifiedPercent: Int
 }
 
+public struct TransactionCategoriesResponse: Codable, Sendable {
+    public let ok: Bool
+    public let categories: [TransactionCategorySummary]
+}
+
+public struct TransactionCategorySummary: Codable, Sendable {
+    public let category: String
+    public let count: Int
+    public let expenseTotal: Double
+    public let incomeTotal: Double
+    public let lastDate: Date?
+}
+
 public struct InboxConfirmResponse: Codable, Sendable {
     public let ok: Bool
     public let transaction: InboxTransaction?
