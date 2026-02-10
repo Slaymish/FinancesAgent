@@ -1,4 +1,4 @@
-# FinanceAgent
+# FinanceAgent (ios soon)
 
 FinanceAgent turns daily Akahu bank transactions into a clean, opinionated finance dashboard.
 
